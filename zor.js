@@ -134,204 +134,212 @@ export default async function (request, env, ctx) {
   // ۴. قالب فرانت‌اند (HTML/TailwindCSS کاملاً سفید و مدرن)
   const html = `
   <!DOCTYPE html>
-  <html lang="fa" dir="rtl">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AX Panel - مدیریت کانفیگ</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
-    <style>
-      body { font-family: 'Vazirmatn', sans-serif; background-color: #f8fafc; }
-    </style>
-  </head>
-  <body class="text-slate-800 min-h-screen flex flex-col">
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AX Panel - پنل مدیریت هوشمند</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
+  <style>
+    body { font-family: 'Vazirmatn', sans-serif; background-color: #f8fafc; }
+  </style>
+</head>
+<body class="text-slate-800 min-h-screen flex flex-col antialiased">
 
-    <!-- هدر -->
-    <header class="bg-white border-b border-slate-100 py-4 px-6 sticky top-0 z-50 shadow-sm">
-      <div class="max-w-6xl mx-auto flex justify-between items-center">
-        <h1 class="text-2xl font-black text-indigo-600 tracking-tight">AX Panel</h1>
-        <div class="flex items-center gap-4">
-          <span class="text-xs bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full font-medium">سیستم هوشمند فعال</span>
+  <!-- هدر اصلی پنل -->
+  <header class="bg-white border-b border-slate-100 py-5 px-6 sticky top-0 z-50 shadow-sm">
+    <div class="max-w-6xl mx-auto flex justify-between items-center">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-indigo-100">AX</div>
+        <h1 class="text-xl font-black text-slate-900 tracking-tight">AX Panel <span class="text-xs font-normal text-slate-400">v1.2</span></h1>
+      </div>
+      <div class="flex items-center gap-4">
+        <span class="text-xs bg-emerald-50 text-emerald-600 px-3.5 py-1.5 rounded-full font-bold">بستر ورکر فعال</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- بدنه اصلی -->
+  <main class="flex-grow max-w-6xl w-full mx-auto p-4 md:p-8 space-y-8">
+    
+    <!-- بخش اتصال به کلودفلر و نمایش آمار -->
+    <section class="bg-white border border-slate-100 rounded-3xl p-6 md:p-8 shadow-sm">
+      <div class="flex items-center gap-2 mb-6">
+        <span class="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse"></span>
+        <h2 class="text-lg font-bold text-slate-800">وضعیت و آمار درخواست‌های کلودفلر</h2>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <input id="cfToken" type="password" placeholder="Cloudflare API Token" class="border border-slate-200 rounded-2xl px-4 py-3.5 text-sm focus:outline-none focus:border-indigo-500 bg-slate-50/50">
+        <input id="cfZoneId" type="text" placeholder="Cloudflare Zone ID" class="border border-slate-200 rounded-2xl px-4 py-3.5 text-sm focus:outline-none focus:border-indigo-500 bg-slate-50/50">
+        <button onclick="fetchCFStats()" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-sm font-bold transition-all py-3.5 shadow-md">بروزرسانی داده‌ها</button>
+      </div>
+      
+      <!-- آمار کارت ها -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-slate-50 border border-slate-100 p-6 rounded-2xl">
+          <p class="text-xs text-slate-400 font-bold">کل کاربران ساخته شده</p>
+          <p id="totalConfigsCount" class="text-3xl font-black text-indigo-600 mt-2">0</p>
+        </div>
+        <div class="bg-slate-50 border border-slate-100 p-6 rounded-2xl">
+          <p class="text-xs text-slate-400 font-bold">تعداد درخواست‌های امروز کلودفلر</p>
+          <p id="todayRequests" class="text-3xl font-black text-slate-800 mt-2">--</p>
+        </div>
+        <div class="bg-slate-50 border border-slate-100 p-6 rounded-2xl">
+          <p class="text-xs text-slate-400 font-bold">وضعیت پنل</p>
+          <p class="text-3xl font-black text-emerald-500 mt-2">فعال و ایمن</p>
         </div>
       </div>
-    </header>
+    </section>
 
-    <main class="flex-grow max-w-6xl w-full mx-auto p-4 md:p-8 space-y-8">
-      
-      <!-- باکس تنظیمات کلودفلر و آمار -->
-      <section class="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm">
-        <h2 class="text-lg font-bold mb-4 text-slate-700">اتصال به کلودفلر برای دریافت آمار زنده</h2>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <input id="cfToken" type="password" placeholder="Cloudflare API Token" class="border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 bg-slate-50/50">
-          <input id="cfZoneId" type="text" placeholder="Cloudflare Zone ID" class="border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 bg-slate-50/50">
-          <button onclick="fetchCFStats()" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-sm font-semibold transition-all py-3">بروزرسانی آمار کلودفلر</button>
+    <!-- ساخت کاربر جدید -->
+    <section class="bg-white border border-slate-100 rounded-3xl p-6 md:p-8 shadow-sm">
+      <h2 class="text-lg font-bold mb-6 text-slate-800 flex items-center gap-2">افزودن کاربر جدید</h2>
+      <form id="createForm" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+        <div>
+          <label class="block text-xs font-bold text-slate-400 mb-2.5">نام کامل کاربر</label>
+          <input id="userName" type="text" required placeholder="مثال: Pixonal" class="w-full border border-slate-200 rounded-2xl px-4 py-3.5 text-sm focus:outline-none focus:border-indigo-500 bg-slate-50/50">
         </div>
-        
-        <!-- کارت‌های آمار -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div class="bg-slate-50 border border-slate-100 p-6 rounded-2xl">
-            <p class="text-xs text-slate-400 font-bold">تعداد کل کانفیگ‌ها</p>
-            <p id="totalConfigsCount" class="text-3xl font-black text-indigo-600 mt-2">۰</p>
-          </div>
-          <div class="bg-slate-50 border border-slate-100 p-6 rounded-2xl">
-            <p class="text-xs text-slate-400 font-bold">درخواست‌های امروز کلودفلر</p>
-            <p id="todayRequests" class="text-3xl font-black text-slate-800 mt-2">--</p>
-          </div>
-          <div class="bg-slate-50 border border-slate-100 p-6 rounded-2xl">
-            <p class="text-xs text-slate-400 font-bold">وضعیت پنل</p>
-            <p class="text-3xl font-black text-emerald-500 mt-2">عالی</p>
-          </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-400 mb-2.5">مدت اعتبار (به روز)</label>
+          <input id="userDays" type="number" value="30" class="w-full border border-slate-200 rounded-2xl px-4 py-3.5 text-sm focus:outline-none focus:border-indigo-500 bg-slate-50/50">
         </div>
-      </section>
-
-      <!-- بخش ساخت کانفیگ جدید -->
-      <section class="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm">
-        <h2 class="text-xl font-extrabold mb-6 text-slate-800">ساخت کاربر جدید</h2>
-        <form id="createForm" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-          <div>
-            <label class="block text-xs font-bold text-slate-500 mb-2">نام کاربر</label>
-            <input id="userName" type="text" required placeholder="مثال: Ali" class="w-full border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 bg-slate-50/50">
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-slate-500 mb-2">مدت زمان (روز)</label>
-            <input id="userDays" type="number" value="30" class="w-full border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 bg-slate-50/50">
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-slate-500 mb-2">آی‌پی تمیز کلودفلر</label>
-            <select id="userCleanIp" class="w-full border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 bg-slate-50/50">
-              <option value="engage.cloudflareclient.com">پیشفرض (WARP)</option>
-              <option value="172.67.14.12">IP Clean 1</option>
-              <option value="104.18.2.2">IP Clean 2</option>
-              <option value="speedtest.net">Speedtest IP</option>
-            </select>
-          </div>
-          <button type="submit" class="bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-bold py-3 px-6 transition-all text-sm h-[48px]">ایجاد کاربر</button>
-        </form>
-      </section>
-
-      <!-- لیست کاربران ساخته شده -->
-      <section class="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm">
-        <h2 class="text-xl font-extrabold mb-6 text-slate-800">لیست کاربران فعال</h2>
-        <div class="overflow-x-auto">
-          <table class="w-full text-right text-sm">
-            <thead>
-              <tr class="border-b border-slate-100 text-slate-400 font-bold">
-                <th class="pb-3">نام کاربر</th>
-                <th class="pb-3">آی‌پی تمیز</th>
-                <th class="pb-3">تاریخ انقضا</th>
-                <th class="pb-3">لینک ساب‌اسکریپشن</th>
-                <th class="pb-3">عملیات</th>
-              </tr>
-            </thead>
-            <tbody id="usersList" class="divide-y divide-slate-50">
-              <!-- کاربران داینامیک اینجا اضافه می‌شوند -->
-            </tbody>
-          </table>
+        <div>
+          <label class="block text-xs font-bold text-slate-400 mb-2.5">انتخاب آی‌پی تمیز کلودفلر</label>
+          <select id="userCleanIp" class="w-full border border-slate-200 rounded-2xl px-4 py-3.5 text-sm focus:outline-none focus:border-indigo-500 bg-slate-50/50">
+            <option value="engage.cloudflareclient.com">پیشفرض (WARP)</option>
+            <option value="172.67.14.12">IP Clean 1 (Iran)</option>
+            <option value="104.18.2.2">IP Clean 2 (MCI)</option>
+            <option value="104.21.90.1">IP Clean 3 (Irancell)</option>
+          </select>
         </div>
-      </section>
+        <button type="submit" class="bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-bold py-3.5 px-6 transition-all text-sm h-[50px]">ایجاد کاربر و ساب‌اسکریپشن</button>
+      </form>
+    </section>
 
-    </main>
-
-    <footer class="text-center py-6 text-xs text-slate-400 border-t border-slate-100 mt-12">
-      AX Panel - قدرت گرفته از کلودفلر لبه شبکه
-    </footer>
-
-    <script>
-      const dbUrl = window.location.origin;
-
-      async function fetchCFStats() {
-        const token = document.getElementById('cfToken').value;
-        const zoneId = document.getElementById('cfZoneId').value;
-        if(!token || !zoneId) return alert('پر کردن فیلدهای توکن و Zone ID الزامی است!');
-
-        // ذخیره سازی در مرورگر کلاینت برای دفعه‌های بعدی
-        localStorage.setItem('cf_token', token);
-        localStorage.setItem('cf_zone', zoneId);
-
-        try {
-          const res = await fetch(\`\${dbUrl}/api/stats\`, {
-            method: 'POST',
-            body: JSON.stringify({ token, zoneId })
-          });
-          const data = await res.json();
-          if(data.todayRequests) {
-            document.getElementById('todayRequests').innerText = Number(data.todayRequests).toLocaleString('fa-IR');
-          }
-        } catch(e) {
-          alert('خطا در دریافت آمار');
-        }
-      }
-
-      // لود کردن تنظیمات ذخیره شده کلودفلر
-      document.addEventListener('DOMContentLoaded', () => {
-        const savedToken = localStorage.getItem('cf_token');
-        const savedZone = localStorage.getItem('cf_zone');
-        if(savedToken) document.getElementById('cfToken').value = savedToken;
-        if(savedZone) document.getElementById('cfZoneId').value = savedZone;
-        
-        loadUsers();
-      });
-
-      async function loadUsers() {
-        const res = await fetch(\`\${dbUrl}/api/configs\`);
-        const users = await res.json();
-        document.getElementById('totalConfigsCount').innerText = users.length.toLocaleString('fa-IR');
-
-        const tbody = document.getElementById('usersList');
-        tbody.innerHTML = '';
-
-        users.forEach(user => {
-          const expiryDate = user.expiry ? new Date(user.expiry).toLocaleDateString('fa-IR') : 'نامحدود';
-          const subLink = \`\${dbUrl}/sub/\${user.id}\`;
-          
-          tbody.innerHTML += \`
-            <tr class="hover:bg-slate-50/50 transition-all">
-              <td class="py-4 font-bold text-slate-800">\${user.name}</td>
-              <td class="py-4 text-slate-500 font-mono text-xs">\${user.cleanIp}</td>
-              <td class="py-4 text-slate-500">\${expiryDate}</td>
-              <td class="py-4 font-mono text-xs text-indigo-600">
-                <div class="flex items-center gap-2">
-                  <input readonly value="\${subLink}" class="bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 text-[10px] w-64 focus:outline-none">
-                  <button onclick="navigator.clipboard.writeText('\${subLink}'); alert('کپی شد!')" class="text-xs bg-slate-200 text-slate-700 px-2 py-1 rounded-lg hover:bg-slate-300">کپی</button>
-                </div>
-              </td>
-              <td class="py-4">
-                <button onclick="deleteUser('\${user.id}')" class="text-rose-500 hover:text-rose-700 font-medium text-xs">حذف</button>
-              </td>
+    <!-- نمایش کاربران فعال -->
+    <section class="bg-white border border-slate-100 rounded-3xl p-6 md:p-8 shadow-sm">
+      <h2 class="text-lg font-bold mb-6 text-slate-800">لیست کاربران فعال و اطلاعات ساب</h2>
+      <div class="overflow-x-auto">
+        <table class="w-full text-right text-sm">
+          <thead>
+            <tr class="border-b border-slate-100 text-slate-400 font-bold">
+              <th class="pb-4">نام کاربر</th>
+              <th class="pb-4">آی‌پی تمیز</th>
+              <th class="pb-4">تاریخ انقضا</th>
+              <th class="pb-4">لینک اختصاصی ساب‌اسکریپشن</th>
+              <th class="pb-4">عملیات</th>
             </tr>
-          \`;
-        });
-      }
+          </thead>
+          <tbody id="usersList" class="divide-y divide-slate-100">
+            <!-- کاربران اضافه می‌شوند -->
+          </tbody>
+        </table>
+      </div>
+    </section>
 
-      document.getElementById('createForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const name = document.getElementById('userName').value;
-        const days = parseInt(document.getElementById('userDays').value);
-        const cleanIp = document.getElementById('userCleanIp').value;
+  </main>
 
-        await fetch(\`\${dbUrl}/api/config/create\`, {
+  <footer class="text-center py-8 text-xs text-slate-400 border-t border-slate-100 bg-white">
+    AX Panel • پشتیبانی شده توسط کلودفلر
+  </footer>
+
+  <script>
+    const dbUrl = window.location.origin;
+
+    async function fetchCFStats() {
+      const token = document.getElementById('cfToken').value;
+      const zoneId = document.getElementById('cfZoneId').value;
+      if(!token || !zoneId) return alert('خطا: پر کردن فیلدها الزامی است!');
+
+      localStorage.setItem('cf_token', token);
+      localStorage.setItem('cf_zone', zoneId);
+
+      try {
+        const res = await fetch(`${dbUrl}/api/stats`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, days, cleanIp })
+          body: JSON.stringify({ token, zoneId })
         });
+        const data = await res.json();
+        if(data.todayRequests) {
+          document.getElementById('todayRequests').innerText = Number(data.todayRequests).toLocaleString('fa-IR');
+        } else {
+          document.getElementById('todayRequests').innerText = '0';
+        }
+      } catch(e) {
+        alert('دریافت آمار با خطا مواجه شد.');
+      }
+    }
 
-        document.getElementById('userName').value = '';
-        loadUsers();
+    document.addEventListener('DOMContentLoaded', () => {
+      const savedToken = localStorage.getItem('cf_token');
+      const savedZone = localStorage.getItem('cf_zone');
+      if(savedToken) document.getElementById('cfToken').value = savedToken;
+      if(savedZone) document.getElementById('cfZoneId').value = savedZone;
+      
+      loadUsers();
+    });
+
+    async function loadUsers() {
+      const res = await fetch(`${dbUrl}/api/configs`);
+      const users = await res.json();
+      document.getElementById('totalConfigsCount').innerText = users.length.toLocaleString('fa-IR');
+
+      const tbody = document.getElementById('usersList');
+      tbody.innerHTML = '';
+
+      users.forEach(user => {
+        const expiryDate = user.expiry ? new Date(user.expiry).toLocaleDateString('fa-IR') : 'نامحدود';
+        const subLink = `${dbUrl}/sub/${user.id}`;
+        
+        tbody.innerHTML += `
+          <tr class="hover:bg-slate-50/50 transition-all">
+            <td class="py-4 font-bold text-slate-800">${user.name}</td>
+            <td class="py-4 text-slate-500 font-mono text-xs">${user.cleanIp}</td>
+            <td class="py-4 text-slate-500">${expiryDate}</td>
+            <td class="py-4">
+              <div class="flex items-center gap-2">
+                <input readonly value="${subLink}" class="bg-slate-50 border border-slate-100 rounded-xl px-3 py-1.5 text-xs text-indigo-600 font-mono w-72 focus:outline-none">
+                <button onclick="navigator.clipboard.writeText('${subLink}'); alert('لینک کپی شد!')" class="text-xs bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-xl font-bold hover:bg-indigo-100">کپی</button>
+              </div>
+            </td>
+            <td class="py-4">
+              <button onclick="deleteUser('${user.id}')" class="text-rose-500 hover:text-rose-700 font-bold text-xs">حذف کاربر</button>
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    document.getElementById('createForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('userName').value;
+      const days = parseInt(document.getElementById('userDays').value);
+      const cleanIp = document.getElementById('userCleanIp').value;
+
+      await fetch(`${dbUrl}/api/config/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, days, cleanIp })
       });
 
-      async function deleteUser(id) {
-        if(!confirm('آیا از حذف این کاربر اطمینان دارید؟')) return;
-        await fetch(\`\${dbUrl}/api/config/delete\`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id })
-        });
-        loadUsers();
-      }
-    </script>
-  </body>
-  </html>
+      document.getElementById('userName').value = '';
+      loadUsers();
+    });
+
+    async function deleteUser(id) {
+      if(!confirm('آیا از حذف این کاربر اطمینان دارید؟')) return;
+      await fetch(`${dbUrl}/api/config/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+      loadUsers();
+    }
+  </script>
+</body>
+</html>
   `;
 
   return new Response(html, {
