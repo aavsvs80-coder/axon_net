@@ -2495,11 +2495,7 @@ const HTML_TEMPLATES = {
 
         async function handleSetup(event) {
             event.preventDefault();
-            const password = document.getElementById('password').value;
-            const captcha_answer = document.getElementById('captcha-input').value;
-            const hash = document.getElementById('captcha-hash').value;
-            const timestamp = document.getElementById('captcha-timestamp').value;
-            const confirmPassword = document.getElementById('confirm-password').value;
+            const password = document.getElementById('password').value;            const confirmPassword = document.getElementById('confirm-password').value;
             const btn = document.getElementById('submit-btn');
             if (password !== confirmPassword) {
                 alert(' رمز عبور و تکرار آن مطابقت ندارند!');
@@ -2511,7 +2507,7 @@ const HTML_TEMPLATES = {
                 const res = await fetch('/api/setup-password', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password, captcha_answer, hash, timestamp })
+                    body: JSON.stringify({ password })
                 });
                 const data = await res.json();
                 if (res.ok && data.success) {
@@ -2657,7 +2653,7 @@ const HTML_TEMPLATES = {
                 if (res.ok && data.success) {
                     window.location.reload();
                 } else {
-                    alert(' رمز عبور اشتباه است');
+                    alert(data.error || 'رمز عبور یا کپچا اشتباه است');
                 }
             } catch (err) {
                 alert('خطا در ارتباط با سرور');
