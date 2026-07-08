@@ -577,6 +577,41 @@ const Router = {
 				return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { "Content-Type": "application/json" } });
 			}
 		}
+		
+		if (url.pathname.startsWith("/api/groups")) {
+			if (request.method === "GET") {
+				const { results } = await env.DB.prepare("SELECT * FROM groups ORDER BY id DESC").all();
+				return new Response(JSON.stringify(results || []), { headers: { "Content-Type": "application/json" } });
+			}
+			if (request.method === "POST") {
+				const { name, limit_gb, limit_req, ports } = await request.json();
+				await env.DB.prepare("INSERT INTO groups (name, limit_gb, limit_req, ports) VALUES (?, ?, ?, ?)").bind(name, limit_gb || null, limit_req || null, ports || "443").run();
+				return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
+			}
+			if (request.method === "DELETE") {
+				const id = url.pathname.split("/").pop();
+				await env.DB.prepare("DELETE FROM groups WHERE id = ?").bind(id).run();
+				await env.DB.prepare("UPDATE users SET group_id = NULL WHERE group_id = ?").bind(id).run();
+				return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
+			}
+		}
+		if (url.pathname === "/api/watermark") {
+			if (request.method === "GET") {
+				const wmText = await env.DB.prepare("SELECT value FROM settings WHERE key = 'watermark_text'").first("value");
+                const wmKey = await env.DB.prepare("SELECT value FROM settings WHERE key = 'watermark_key'").first("value");
+				return new Response(JSON.stringify({ text: wmText || "", secret: wmKey || "" }), { headers: { "Content-Type": "application/json" } });
+			}
+			if (request.method === "POST") {
+				const { text, key } = await request.json();
+				const storedKey = await env.DB.prepare("SELECT value FROM settings WHERE key = 'watermark_key'").first("value");
+				if (key !== storedKey) {
+					return new Response(JSON.stringify({ error: "کد لایسنس اشتباه است" }), { status: 403, headers: { "Content-Type": "application/json" } });
+				}
+				await env.DB.prepare("UPDATE settings SET value = ? WHERE key = 'watermark_text'").bind(text || "").run();
+				return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
+			}
+		}
+
 		if (url.pathname.startsWith("/api/users")) {
 			const pathParts = url.pathname.split("/");
 			const isUserAction = pathParts.length > 3;
@@ -599,7 +634,7 @@ const Router = {
 						}
 						return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
 					} else {
-						const { username: new_username, limit_gb, expiry_days, limit_req, ips, tls, port, fingerprint, ip_limit, block_porn, block_ads, frag_len, frag_int, user_proxy_iata, user_socks5, user_proxy_ip } = body;
+						const { username: new_username, limit_gb, expiry_days, limit_req, ips, tls, port, fingerprint, ip_limit, block_porn, block_ads, frag_len, frag_int, user_proxy_iata, user_socks5, user_proxy_ip, group_id } = body;
 						if (new_username && new_username !== username) {
 							const existing = await env.DB.prepare("SELECT id FROM users WHERE username = ?").bind(new_username).first();
 							if (existing) {
@@ -622,8 +657,8 @@ const Router = {
 								GLOBAL_LAST_ACTIVE_WRITE.delete(username);
 							}
 						}
-						await env.DB.prepare("UPDATE users SET username = ?, limit_gb = ?, expiry_days = ?, limit_req = ?, ips = ?, tls = ?, port = ?, fingerprint = ?, max_connections = ?, ip_limit = ?, block_porn = ?, block_ads = ?, frag_len = ?, frag_int = ?, user_proxy_iata = ?, user_socks5 = ?, user_proxy_ip = ? WHERE username = ?")
-							.bind(new_username || username, limit_gb ? parseFloat(limit_gb) : null, expiry_days ? parseInt(expiry_days) : null, limit_req ? parseInt(limit_req) : null, ips || null, tls, port, fingerprint || "chrome", ip_limit ? parseInt(ip_limit) : null, ip_limit ? parseInt(ip_limit) : null, block_porn ? 1 : 0, block_ads ? 1 : 0, frag_len !== undefined ? frag_len : "200-3000", frag_int !== undefined ? frag_int : "1-2", user_proxy_iata || null, user_socks5 || null, user_proxy_ip || null, username)
+						await env.DB.prepare("UPDATE users SET username = ?, limit_gb = ?, expiry_days = ?, limit_req = ?, ips = ?, tls = ?, port = ?, fingerprint = ?, max_connections = ?, ip_limit = ?, block_porn = ?, block_ads = ?, frag_len = ?, frag_int = ?, user_proxy_iata = ?, user_socks5 = ?, user_proxy_ip = ?, group_id = ? WHERE username = ?")
+							.bind(new_username || username, limit_gb ? parseFloat(limit_gb) : null, expiry_days ? parseInt(expiry_days) : null, limit_req ? parseInt(limit_req) : null, ips || null, tls, port, fingerprint || "chrome", ip_limit ? parseInt(ip_limit) : null, ip_limit ? parseInt(ip_limit) : null, block_porn ? 1 : 0, block_ads ? 1 : 0, frag_len !== undefined ? frag_len : "200-3000", frag_int !== undefined ? frag_int : "1-2", user_proxy_iata || null, user_socks5 || null, user_proxy_ip || null, group_id || null, username)
 							.run();
 						return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
 					}
@@ -684,7 +719,7 @@ const Router = {
 					);
 				}
 				if (request.method === "POST") {
-					const { username, uuid, limit_gb, expiry_days, limit_req, ips, tls, port, fingerprint, ip_limit, used_gb, used_req, created_at, is_active, block_porn, block_ads, frag_len, frag_int, user_proxy_iata, user_socks5, user_proxy_ip } = await request.json();
+					const { username, uuid, limit_gb, expiry_days, limit_req, ips, tls, port, fingerprint, ip_limit, used_gb, used_req, created_at, is_active, block_porn, block_ads, frag_len, frag_int, user_proxy_iata, user_socks5, user_proxy_ip, group_id } = await request.json();
 					if (!username) {
 						return new Response(JSON.stringify({ error: "نام کاربری اجباری است" }), { status: 400, headers: { "Content-Type": "application/json" } });
 					}
@@ -700,8 +735,8 @@ const Router = {
 					const parsedIsActive = parseInt(is_active);
 					const finalIsActive = !isNaN(parsedIsActive) ? parsedIsActive : 1;
 					try {
-						await env.DB.prepare("INSERT INTO users (username, uuid, limit_gb, expiry_days, limit_req, ips, connection_type, tls, port, fingerprint, max_connections, ip_limit, used_gb, used_req, created_at, is_active, block_porn, block_ads, frag_len, frag_int, user_proxy_iata, user_socks5, user_proxy_ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-							.bind(username, finalUuid, limit_gb ? parseFloat(limit_gb) : null, expiry_days ? parseInt(expiry_days) : null, limit_req ? parseInt(limit_req) : null, ips || null, atob("dmxlc3M="), tls, port, fingerprint || "chrome", ip_limit ? parseInt(ip_limit) : null, ip_limit ? parseInt(ip_limit) : null, finalUsedGb, finalUsedReq, finalCreatedAt, finalIsActive, block_porn ? 1 : 0, block_ads ? 1 : 0, frag_len !== undefined ? frag_len : "200-3000", frag_int !== undefined ? frag_int : "1-2", user_proxy_iata || null, user_socks5 || null, user_proxy_ip || null)
+						await env.DB.prepare("INSERT INTO users (username, uuid, limit_gb, expiry_days, limit_req, ips, connection_type, tls, port, fingerprint, max_connections, ip_limit, used_gb, used_req, created_at, is_active, block_porn, block_ads, frag_len, frag_int, user_proxy_iata, user_socks5, user_proxy_ip, group_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+							.bind(username, finalUuid, limit_gb ? parseFloat(limit_gb) : null, expiry_days ? parseInt(expiry_days) : null, limit_req ? parseInt(limit_req) : null, ips || null, atob("dmxlc3M="), tls, port, fingerprint || "chrome", ip_limit ? parseInt(ip_limit) : null, ip_limit ? parseInt(ip_limit) : null, finalUsedGb, finalUsedReq, finalCreatedAt, finalIsActive, block_porn ? 1 : 0, block_ads ? 1 : 0, frag_len !== undefined ? frag_len : "200-3000", frag_int !== undefined ? frag_int : "1-2", user_proxy_iata || null, user_socks5 || null, user_proxy_ip || null, group_id || null)
 							.run();
 						return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
 					} catch (err) {
@@ -2704,7 +2739,232 @@ const HTML_TEMPLATES = {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AX Panel</title>
-    <script>
+    
+<div id="groups-tab" class="hidden max-w-4xl mx-auto px-4 py-8">
+    <h2 class="text-2xl font-black mb-6 text-amber-500" data-i18n="مدیریت گروه‌ها">مدیریت گروه‌ها</h2>
+    <div class="bg-white dark:bg-amoled-card p-6 rounded-2xl border border-gray-200 dark:border-amoled-border shadow-sm mb-8">
+        <h3 class="text-lg font-bold mb-4" data-i18n="ساخت گروه جدید">ساخت گروه جدید</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div><label class="text-sm font-medium" data-i18n="نام گروه">نام گروه</label><input type="text" id="grp-name" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <div><label class="text-sm font-medium" data-i18n="حجم کل (GB) - اختیاری">حجم کل (GB) - اختیاری</label><input type="number" id="grp-gb" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <div><label class="text-sm font-medium" data-i18n="تعداد ریکوئست کلودفلر">تعداد ریکوئست کلودفلر</label><input type="number" id="grp-req" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <div><label class="text-sm font-medium" data-i18n="پورت‌های مجاز">پورت‌های مجاز (با ویرگول جدا کنید)</label><input type="text" id="grp-ports" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm" placeholder="443, 8443, 2053" value="443,8443,2053,2083,2087,2096"></div>
+        </div>
+        <button onclick="createGroup()" class="mt-4 px-6 py-2 bg-amber-500 text-white font-bold rounded-lg hover:bg-amber-600 transition" data-i18n="ذخیره گروه">ذخیره گروه</button>
+    </div>
+    <div id="groups-list" class="space-y-3"></div>
+</div>
+
+<div id="settings-tab" class="hidden max-w-4xl mx-auto px-4 py-8">
+    <h2 class="text-2xl font-black mb-6 text-sky-500" data-i18n="تنظیمات و واترمارک">تنظیمات و واترمارک</h2>
+    <div class="bg-white dark:bg-amoled-card p-6 rounded-2xl border border-gray-200 dark:border-amoled-border shadow-sm mb-6">
+        <h3 class="text-lg font-bold mb-4" data-i18n="واترمارک اختصاصی">واترمارک اختصاصی</h3>
+        <p class="text-sm text-gray-500 mb-4" data-i18n="شرح واترمارک">کد لایسنس شما:</p>
+        <div class="p-3 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-lg font-mono text-xs mb-4 text-center break-all select-all text-sky-500" id="wm-secret-display">در حال بارگذاری...</div>
+        <div class="space-y-4">
+            <div><label class="text-sm font-medium text-rose-500" data-i18n="کد لایسنس 32 رقمی">کد لایسنس 32 رقمی</label><input type="password" id="wm-key" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm font-mono text-center" placeholder="کد لایسنس خود را وارد کنید"></div>
+            <div><label class="text-sm font-medium" data-i18n="متن واترمارک">متن واترمارک</label><input type="text" id="wm-text" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm" placeholder="مثلا: ساخته شده توسط علی"></div>
+            <button onclick="updateWatermark()" class="px-6 py-2 bg-sky-500 text-white font-bold rounded-lg hover:bg-sky-600 transition" data-i18n="تغییر واترمارک">تغییر واترمارک</button>
+        </div>
+    </div>
+    <div class="bg-white dark:bg-amoled-card p-6 rounded-2xl border border-gray-200 dark:border-amoled-border shadow-sm">
+        <h3 class="text-lg font-bold mb-4" data-i18n="تغییر رمز عبور پنل">تغییر رمز عبور پنل</h3>
+        <div class="space-y-4">
+            <div><label class="text-sm font-medium" data-i18n="رمز فعلی">رمز فعلی</label><input type="password" id="cp-old" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <div><label class="text-sm font-medium" data-i18n="رمز جدید">رمز جدید</label><input type="password" id="cp-new" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <button onclick="changePassword()" class="px-6 py-2 bg-sky-500 text-white font-bold rounded-lg hover:bg-sky-600 transition" data-i18n="تغییر رمز">تغییر رمز</button>
+        </div>
+    </div>
+</div>
+
+<div id="buy-tab" class="hidden max-w-4xl mx-auto px-4 py-8">
+    <h2 class="text-2xl font-black mb-6 text-green-500" data-i18n="خرید پنل کامل / حمایت">خرید پنل کامل / حمایت</h2>
+    <div class="bg-white dark:bg-amoled-card p-6 rounded-2xl border border-gray-200 dark:border-amoled-border shadow-sm text-center">
+        <h3 class="text-xl font-bold mb-2">نسخه کامل AX Panel</h3>
+        <p class="text-gray-500 dark:text-zinc-400 mb-6 leading-relaxed">
+            این پنل در حال توسعه مداوم است. برای دسترسی به آپدیت‌های اختصاصی، رفع باگ‌ها، و امکانات فوق‌پیشرفته می‌توانید نسخه ویژه را تهیه کنید یا از پروژه حمایت مالی کنید.
+        </p>
+        <a href="https://t.me/AX_PANEL_BOT" target="_blank" class="inline-block px-8 py-3 bg-sky-500 text-white font-bold rounded-xl shadow-lg shadow-sky-500/30 hover:scale-105 transition-transform duration-200" data-i18n="ارتباط با ربات تلگرام">ارتباط با توسعه دهنده در تلگرام</a>
+        <a href="https://donatonion.ir-netlify.workers.dev" target="_blank" class="inline-block mt-4 md:mt-0 md:mr-4 px-8 py-3 bg-rose-500 text-white font-bold rounded-xl shadow-lg shadow-rose-500/30 hover:scale-105 transition-transform duration-200" data-i18n="حمایت مالی از پروژه">حمایت مالی از پروژه</a>
+    </div>
+</div>
+</div>
+</div>
+
+<script>
+
+        let groupsData = [];
+        let watermarkData = "ساخته شده توسط Pixonal";
+        let currentLang = 'fa';
+
+        const i18nDict = {
+            'مدیریت گروه‌ها': 'Group Management',
+            'ساخت گروه جدید': 'Create New Group',
+            'نام گروه': 'Group Name',
+            'حجم کل (GB) - اختیاری': 'Total Limit (GB) - Optional',
+            'تعداد ریکوئست کلودفلر': 'Cloudflare Request Limit',
+            'پورت‌های مجاز': 'Allowed Ports (comma separated)',
+            'ذخیره گروه': 'Save Group',
+            'تنظیمات و واترمارک': 'Settings & Watermark',
+            'واترمارک اختصاصی': 'Custom Watermark',
+            'شرح واترمارک': 'Your License Code:',
+            'کد لایسنس 32 رقمی': '32-Character License Code',
+            'متن واترمارک': 'Watermark Text',
+            'تغییر واترمارک': 'Change Watermark',
+            'تغییر رمز عبور پنل': 'Change Panel Password',
+            'رمز فعلی': 'Current Password',
+            'رمز جدید': 'New Password',
+            'تغییر رمز': 'Change Password',
+            'خرید پنل کامل / حمایت': 'Buy Full Panel / Support',
+            'ارتباط با ربات تلگرام': 'Contact Developer on Telegram',
+            'حمایت مالی از پروژه': 'Financial Support'
+        };
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'fa' ? 'en' : 'fa';
+            document.body.setAttribute('dir', currentLang === 'fa' ? 'rtl' : 'ltr');
+            document.getElementById('lang-btn').innerText = currentLang === 'fa' ? 'EN' : 'FA';
+            
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if(currentLang === 'en' && i18nDict[key]) {
+                    if(!el.getAttribute('data-orig')) el.setAttribute('data-orig', el.innerText);
+                    el.innerText = i18nDict[key];
+                } else if(currentLang === 'fa' && el.getAttribute('data-orig')) {
+                    el.innerText = el.getAttribute('data-orig');
+                }
+            });
+        }
+
+        function showDashboard() {
+            document.querySelector('main').classList.remove('hidden');
+            document.getElementById('groups-tab').classList.add('hidden');
+            document.getElementById('settings-tab').classList.add('hidden');
+            document.getElementById('buy-tab').classList.add('hidden');
+        }
+        function showGroupsTab() {
+            document.querySelector('main').classList.add('hidden');
+            document.getElementById('groups-tab').classList.remove('hidden');
+            document.getElementById('settings-tab').classList.add('hidden');
+            document.getElementById('buy-tab').classList.add('hidden');
+            fetchGroups();
+        }
+        function showSettingsTab() {
+            document.querySelector('main').classList.add('hidden');
+            document.getElementById('groups-tab').classList.add('hidden');
+            document.getElementById('settings-tab').classList.remove('hidden');
+            document.getElementById('buy-tab').classList.add('hidden');
+            fetchWatermark();
+        }
+        function showBuyTab() {
+            document.querySelector('main').classList.add('hidden');
+            document.getElementById('groups-tab').classList.add('hidden');
+            document.getElementById('settings-tab').classList.add('hidden');
+            document.getElementById('buy-tab').classList.remove('hidden');
+        }
+
+        async function fetchGroups() {
+            try {
+                const res = await fetch('/api/groups');
+                groupsData = await res.json() || [];
+                renderGroups();
+                renderGroupSelector();
+            } catch(e){}
+        }
+
+        function renderGroups() {
+            const container = document.getElementById('groups-list');
+            container.innerHTML = groupsData.map(g => `
+                <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 rounded-xl">
+                    <div>
+                        <div class="font-bold text-sm text-indigo-500">${g.name}</div>
+                        <div class="text-xs text-gray-500 mt-1">حجم: ${g.limit_gb || 'نامحدود'} GB | ریکوئست: ${g.limit_req || 'نامحدود'} | پورت‌ها: ${g.ports}</div>
+                    </div>
+                    <button onclick="deleteGroup(${g.id})" class="text-rose-500 hover:text-rose-600 font-bold text-xs bg-rose-50 dark:bg-rose-900/20 px-3 py-1.5 rounded-lg">حذف</button>
+                </div>
+            `).join('');
+        }
+
+        async function createGroup() {
+            const name = document.getElementById('grp-name').value;
+            const limit_gb = document.getElementById('grp-gb').value;
+            const limit_req = document.getElementById('grp-req').value;
+            const ports = document.getElementById('grp-ports').value;
+            if(!name) return showToast('نام گروه الزامی است', 'error');
+            await fetch('/api/groups', { method: 'POST', body: JSON.stringify({name, limit_gb, limit_req, ports}) });
+            document.getElementById('grp-name').value = '';
+            showToast('گروه اضافه شد');
+            fetchGroups();
+        }
+
+        async function deleteGroup(id) {
+            if(!confirm('مطمئن هستید؟ کاربرهای این گروه بدون گروه خواهند شد.')) return;
+            await fetch('/api/groups/' + id, { method: 'DELETE' });
+            showToast('گروه حذف شد');
+            fetchGroups();
+        }
+
+        async function fetchWatermark() {
+            try {
+                const res = await fetch('/api/watermark');
+                const data = await res.json();
+                watermarkData = data.text || '';
+                document.getElementById('wm-text').value = watermarkData;
+                document.getElementById('wm-text-sidebar').innerText = watermarkData;
+                document.getElementById('wm-secret-display').innerText = data.secret;
+            } catch(e){}
+        }
+
+        async function updateWatermark() {
+            const key = document.getElementById('wm-key').value;
+            const text = document.getElementById('wm-text').value;
+            if(!key) return showToast('کد لایسنس را وارد کنید', 'error');
+            const res = await fetch('/api/watermark', { method: 'POST', body: JSON.stringify({text, key}) });
+            if(res.ok) {
+                showToast('واترمارک تغییر یافت');
+                fetchWatermark();
+            } else {
+                const err = await res.json();
+                showToast(err.error || 'خطا در لایسنس', 'error');
+            }
+        }
+        
+        async function changePassword() {
+            const oldPass = document.getElementById('cp-old').value;
+            const newPass = document.getElementById('cp-new').value;
+            if(!oldPass || !newPass) return showToast('فیلدها را پر کنید', 'error');
+            const res = await fetch('/api/change-password', { method: 'POST', body: JSON.stringify({old_password: oldPass, new_password: newPass}) });
+            if(res.ok) {
+                showToast('رمز تغییر یافت');
+                setTimeout(()=>location.reload(), 1000);
+            } else {
+                showToast('رمز فعلی اشتباه است', 'error');
+            }
+        }
+
+        function renderGroupSelector() {
+            const sel = document.getElementById('user-group');
+            if(!sel) return;
+            const currentVal = sel.value;
+            sel.innerHTML = '<option value="">-- بدون گروه (تنظیم دستی) --</option>' + groupsData.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+            sel.value = currentVal;
+            
+            sel.onchange = (e) => {
+                const gid = parseInt(e.target.value);
+                const g = groupsData.find(x => x.id === gid);
+                if(g) {
+                    if(g.limit_gb) document.getElementById('limit').value = g.limit_gb;
+                    if(g.limit_req) document.getElementById('limit-req').value = g.limit_req;
+                    if(g.ports) {
+                        const portsArr = g.ports.split(',').map(x=>x.trim());
+                        document.querySelectorAll('input[name="ports"]').forEach(cb => {
+                            cb.checked = portsArr.includes(cb.value);
+                        });
+                    }
+                }
+            };
+        }
+
         const originalWarn = console.warn;
         console.warn = (...args) => {
             if (typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com')) return;
@@ -2714,7 +2974,232 @@ const HTML_TEMPLATES = {
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
-    <script>
+    
+<div id="groups-tab" class="hidden max-w-4xl mx-auto px-4 py-8">
+    <h2 class="text-2xl font-black mb-6 text-amber-500" data-i18n="مدیریت گروه‌ها">مدیریت گروه‌ها</h2>
+    <div class="bg-white dark:bg-amoled-card p-6 rounded-2xl border border-gray-200 dark:border-amoled-border shadow-sm mb-8">
+        <h3 class="text-lg font-bold mb-4" data-i18n="ساخت گروه جدید">ساخت گروه جدید</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div><label class="text-sm font-medium" data-i18n="نام گروه">نام گروه</label><input type="text" id="grp-name" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <div><label class="text-sm font-medium" data-i18n="حجم کل (GB) - اختیاری">حجم کل (GB) - اختیاری</label><input type="number" id="grp-gb" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <div><label class="text-sm font-medium" data-i18n="تعداد ریکوئست کلودفلر">تعداد ریکوئست کلودفلر</label><input type="number" id="grp-req" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <div><label class="text-sm font-medium" data-i18n="پورت‌های مجاز">پورت‌های مجاز (با ویرگول جدا کنید)</label><input type="text" id="grp-ports" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm" placeholder="443, 8443, 2053" value="443,8443,2053,2083,2087,2096"></div>
+        </div>
+        <button onclick="createGroup()" class="mt-4 px-6 py-2 bg-amber-500 text-white font-bold rounded-lg hover:bg-amber-600 transition" data-i18n="ذخیره گروه">ذخیره گروه</button>
+    </div>
+    <div id="groups-list" class="space-y-3"></div>
+</div>
+
+<div id="settings-tab" class="hidden max-w-4xl mx-auto px-4 py-8">
+    <h2 class="text-2xl font-black mb-6 text-sky-500" data-i18n="تنظیمات و واترمارک">تنظیمات و واترمارک</h2>
+    <div class="bg-white dark:bg-amoled-card p-6 rounded-2xl border border-gray-200 dark:border-amoled-border shadow-sm mb-6">
+        <h3 class="text-lg font-bold mb-4" data-i18n="واترمارک اختصاصی">واترمارک اختصاصی</h3>
+        <p class="text-sm text-gray-500 mb-4" data-i18n="شرح واترمارک">کد لایسنس شما:</p>
+        <div class="p-3 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-lg font-mono text-xs mb-4 text-center break-all select-all text-sky-500" id="wm-secret-display">در حال بارگذاری...</div>
+        <div class="space-y-4">
+            <div><label class="text-sm font-medium text-rose-500" data-i18n="کد لایسنس 32 رقمی">کد لایسنس 32 رقمی</label><input type="password" id="wm-key" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm font-mono text-center" placeholder="کد لایسنس خود را وارد کنید"></div>
+            <div><label class="text-sm font-medium" data-i18n="متن واترمارک">متن واترمارک</label><input type="text" id="wm-text" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm" placeholder="مثلا: ساخته شده توسط علی"></div>
+            <button onclick="updateWatermark()" class="px-6 py-2 bg-sky-500 text-white font-bold rounded-lg hover:bg-sky-600 transition" data-i18n="تغییر واترمارک">تغییر واترمارک</button>
+        </div>
+    </div>
+    <div class="bg-white dark:bg-amoled-card p-6 rounded-2xl border border-gray-200 dark:border-amoled-border shadow-sm">
+        <h3 class="text-lg font-bold mb-4" data-i18n="تغییر رمز عبور پنل">تغییر رمز عبور پنل</h3>
+        <div class="space-y-4">
+            <div><label class="text-sm font-medium" data-i18n="رمز فعلی">رمز فعلی</label><input type="password" id="cp-old" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <div><label class="text-sm font-medium" data-i18n="رمز جدید">رمز جدید</label><input type="password" id="cp-new" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <button onclick="changePassword()" class="px-6 py-2 bg-sky-500 text-white font-bold rounded-lg hover:bg-sky-600 transition" data-i18n="تغییر رمز">تغییر رمز</button>
+        </div>
+    </div>
+</div>
+
+<div id="buy-tab" class="hidden max-w-4xl mx-auto px-4 py-8">
+    <h2 class="text-2xl font-black mb-6 text-green-500" data-i18n="خرید پنل کامل / حمایت">خرید پنل کامل / حمایت</h2>
+    <div class="bg-white dark:bg-amoled-card p-6 rounded-2xl border border-gray-200 dark:border-amoled-border shadow-sm text-center">
+        <h3 class="text-xl font-bold mb-2">نسخه کامل AX Panel</h3>
+        <p class="text-gray-500 dark:text-zinc-400 mb-6 leading-relaxed">
+            این پنل در حال توسعه مداوم است. برای دسترسی به آپدیت‌های اختصاصی، رفع باگ‌ها، و امکانات فوق‌پیشرفته می‌توانید نسخه ویژه را تهیه کنید یا از پروژه حمایت مالی کنید.
+        </p>
+        <a href="https://t.me/AX_PANEL_BOT" target="_blank" class="inline-block px-8 py-3 bg-sky-500 text-white font-bold rounded-xl shadow-lg shadow-sky-500/30 hover:scale-105 transition-transform duration-200" data-i18n="ارتباط با ربات تلگرام">ارتباط با توسعه دهنده در تلگرام</a>
+        <a href="https://donatonion.ir-netlify.workers.dev" target="_blank" class="inline-block mt-4 md:mt-0 md:mr-4 px-8 py-3 bg-rose-500 text-white font-bold rounded-xl shadow-lg shadow-rose-500/30 hover:scale-105 transition-transform duration-200" data-i18n="حمایت مالی از پروژه">حمایت مالی از پروژه</a>
+    </div>
+</div>
+</div>
+</div>
+
+<script>
+
+        let groupsData = [];
+        let watermarkData = "ساخته شده توسط Pixonal";
+        let currentLang = 'fa';
+
+        const i18nDict = {
+            'مدیریت گروه‌ها': 'Group Management',
+            'ساخت گروه جدید': 'Create New Group',
+            'نام گروه': 'Group Name',
+            'حجم کل (GB) - اختیاری': 'Total Limit (GB) - Optional',
+            'تعداد ریکوئست کلودفلر': 'Cloudflare Request Limit',
+            'پورت‌های مجاز': 'Allowed Ports (comma separated)',
+            'ذخیره گروه': 'Save Group',
+            'تنظیمات و واترمارک': 'Settings & Watermark',
+            'واترمارک اختصاصی': 'Custom Watermark',
+            'شرح واترمارک': 'Your License Code:',
+            'کد لایسنس 32 رقمی': '32-Character License Code',
+            'متن واترمارک': 'Watermark Text',
+            'تغییر واترمارک': 'Change Watermark',
+            'تغییر رمز عبور پنل': 'Change Panel Password',
+            'رمز فعلی': 'Current Password',
+            'رمز جدید': 'New Password',
+            'تغییر رمز': 'Change Password',
+            'خرید پنل کامل / حمایت': 'Buy Full Panel / Support',
+            'ارتباط با ربات تلگرام': 'Contact Developer on Telegram',
+            'حمایت مالی از پروژه': 'Financial Support'
+        };
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'fa' ? 'en' : 'fa';
+            document.body.setAttribute('dir', currentLang === 'fa' ? 'rtl' : 'ltr');
+            document.getElementById('lang-btn').innerText = currentLang === 'fa' ? 'EN' : 'FA';
+            
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if(currentLang === 'en' && i18nDict[key]) {
+                    if(!el.getAttribute('data-orig')) el.setAttribute('data-orig', el.innerText);
+                    el.innerText = i18nDict[key];
+                } else if(currentLang === 'fa' && el.getAttribute('data-orig')) {
+                    el.innerText = el.getAttribute('data-orig');
+                }
+            });
+        }
+
+        function showDashboard() {
+            document.querySelector('main').classList.remove('hidden');
+            document.getElementById('groups-tab').classList.add('hidden');
+            document.getElementById('settings-tab').classList.add('hidden');
+            document.getElementById('buy-tab').classList.add('hidden');
+        }
+        function showGroupsTab() {
+            document.querySelector('main').classList.add('hidden');
+            document.getElementById('groups-tab').classList.remove('hidden');
+            document.getElementById('settings-tab').classList.add('hidden');
+            document.getElementById('buy-tab').classList.add('hidden');
+            fetchGroups();
+        }
+        function showSettingsTab() {
+            document.querySelector('main').classList.add('hidden');
+            document.getElementById('groups-tab').classList.add('hidden');
+            document.getElementById('settings-tab').classList.remove('hidden');
+            document.getElementById('buy-tab').classList.add('hidden');
+            fetchWatermark();
+        }
+        function showBuyTab() {
+            document.querySelector('main').classList.add('hidden');
+            document.getElementById('groups-tab').classList.add('hidden');
+            document.getElementById('settings-tab').classList.add('hidden');
+            document.getElementById('buy-tab').classList.remove('hidden');
+        }
+
+        async function fetchGroups() {
+            try {
+                const res = await fetch('/api/groups');
+                groupsData = await res.json() || [];
+                renderGroups();
+                renderGroupSelector();
+            } catch(e){}
+        }
+
+        function renderGroups() {
+            const container = document.getElementById('groups-list');
+            container.innerHTML = groupsData.map(g => `
+                <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 rounded-xl">
+                    <div>
+                        <div class="font-bold text-sm text-indigo-500">${g.name}</div>
+                        <div class="text-xs text-gray-500 mt-1">حجم: ${g.limit_gb || 'نامحدود'} GB | ریکوئست: ${g.limit_req || 'نامحدود'} | پورت‌ها: ${g.ports}</div>
+                    </div>
+                    <button onclick="deleteGroup(${g.id})" class="text-rose-500 hover:text-rose-600 font-bold text-xs bg-rose-50 dark:bg-rose-900/20 px-3 py-1.5 rounded-lg">حذف</button>
+                </div>
+            `).join('');
+        }
+
+        async function createGroup() {
+            const name = document.getElementById('grp-name').value;
+            const limit_gb = document.getElementById('grp-gb').value;
+            const limit_req = document.getElementById('grp-req').value;
+            const ports = document.getElementById('grp-ports').value;
+            if(!name) return showToast('نام گروه الزامی است', 'error');
+            await fetch('/api/groups', { method: 'POST', body: JSON.stringify({name, limit_gb, limit_req, ports}) });
+            document.getElementById('grp-name').value = '';
+            showToast('گروه اضافه شد');
+            fetchGroups();
+        }
+
+        async function deleteGroup(id) {
+            if(!confirm('مطمئن هستید؟ کاربرهای این گروه بدون گروه خواهند شد.')) return;
+            await fetch('/api/groups/' + id, { method: 'DELETE' });
+            showToast('گروه حذف شد');
+            fetchGroups();
+        }
+
+        async function fetchWatermark() {
+            try {
+                const res = await fetch('/api/watermark');
+                const data = await res.json();
+                watermarkData = data.text || '';
+                document.getElementById('wm-text').value = watermarkData;
+                document.getElementById('wm-text-sidebar').innerText = watermarkData;
+                document.getElementById('wm-secret-display').innerText = data.secret;
+            } catch(e){}
+        }
+
+        async function updateWatermark() {
+            const key = document.getElementById('wm-key').value;
+            const text = document.getElementById('wm-text').value;
+            if(!key) return showToast('کد لایسنس را وارد کنید', 'error');
+            const res = await fetch('/api/watermark', { method: 'POST', body: JSON.stringify({text, key}) });
+            if(res.ok) {
+                showToast('واترمارک تغییر یافت');
+                fetchWatermark();
+            } else {
+                const err = await res.json();
+                showToast(err.error || 'خطا در لایسنس', 'error');
+            }
+        }
+        
+        async function changePassword() {
+            const oldPass = document.getElementById('cp-old').value;
+            const newPass = document.getElementById('cp-new').value;
+            if(!oldPass || !newPass) return showToast('فیلدها را پر کنید', 'error');
+            const res = await fetch('/api/change-password', { method: 'POST', body: JSON.stringify({old_password: oldPass, new_password: newPass}) });
+            if(res.ok) {
+                showToast('رمز تغییر یافت');
+                setTimeout(()=>location.reload(), 1000);
+            } else {
+                showToast('رمز فعلی اشتباه است', 'error');
+            }
+        }
+
+        function renderGroupSelector() {
+            const sel = document.getElementById('user-group');
+            if(!sel) return;
+            const currentVal = sel.value;
+            sel.innerHTML = '<option value="">-- بدون گروه (تنظیم دستی) --</option>' + groupsData.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+            sel.value = currentVal;
+            
+            sel.onchange = (e) => {
+                const gid = parseInt(e.target.value);
+                const g = groupsData.find(x => x.id === gid);
+                if(g) {
+                    if(g.limit_gb) document.getElementById('limit').value = g.limit_gb;
+                    if(g.limit_req) document.getElementById('limit-req').value = g.limit_req;
+                    if(g.ports) {
+                        const portsArr = g.ports.split(',').map(x=>x.trim());
+                        document.querySelectorAll('input[name="ports"]').forEach(cb => {
+                            cb.checked = portsArr.includes(cb.value);
+                        });
+                    }
+                }
+            };
+        }
+
         tailwind.config = {
             darkMode: 'class',
             theme: {
@@ -2769,18 +3254,49 @@ const HTML_TEMPLATES = {
         }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-900 dark:bg-amoled-bg dark:text-zinc-100 min-h-screen transition-colors duration-200">
+<body class="bg-gray-50 text-gray-900 dark:bg-amoled-bg dark:text-zinc-100 flex h-screen overflow-hidden font-sans" dir="rtl">
+    <aside id="sidebar" class="w-64 bg-white dark:bg-amoled-card border-l border-gray-200 dark:border-amoled-border flex flex-col transition-all duration-300 transform translate-x-full md:translate-x-0 fixed md:relative z-[90] h-full right-0 shadow-2xl md:shadow-none">
+        <div class="p-4 border-b border-gray-200 dark:border-amoled-border flex items-center justify-between">
+            <h1 class="text-2xl font-black text-indigo-600 dark:text-indigo-400">AX Panel</h1>
+            <button onclick="document.getElementById('sidebar').classList.toggle('translate-x-full')" class="md:hidden text-gray-500 text-3xl font-bold hover:text-gray-900 dark:hover:text-white">&times;</button>
+        </div>
+        <nav class="flex-1 overflow-y-auto p-4 space-y-2 font-medium">
+            <a href="#" onclick="showDashboard(); if(window.innerWidth<768) document.getElementById('sidebar').classList.add('translate-x-full'); window.scrollTo(0,0);" class="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-zinc-800 transition">داشبورد / کاربران</a>
+            <a href="#" onclick="showGroupsTab(); if(window.innerWidth<768) document.getElementById('sidebar').classList.add('translate-x-full');" class="flex items-center gap-3 p-3 rounded-xl hover:bg-amber-50 dark:hover:bg-amber-900/20 transition text-amber-500">مدیریت گروه‌ها</a>
+            <a href="#" onclick="showSettingsTab(); if(window.innerWidth<768) document.getElementById('sidebar').classList.add('translate-x-full');" class="flex items-center gap-3 p-3 rounded-xl hover:bg-sky-50 dark:hover:bg-sky-900/20 transition text-sky-500">تنظیمات و واترمارک</a>
+            <a href="#" onclick="showBuyTab(); if(window.innerWidth<768) document.getElementById('sidebar').classList.add('translate-x-full');" class="flex items-center gap-3 p-3 rounded-xl hover:bg-green-50 dark:hover:bg-green-900/20 transition text-green-500">خرید پنل کامل</a>
+            <button onclick="logout()" class="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-900/20 text-rose-500 transition">خروج از پنل</button>
+        </nav>
+        <div class="p-4 border-t border-gray-200 dark:border-amoled-border flex justify-between items-center gap-2">
+            <button id="lang-btn" onclick="toggleLanguage()" class="w-10 h-10 flex items-center justify-center bg-gray-100 dark:bg-zinc-800 rounded-xl text-indigo-500 font-bold hover:bg-indigo-50 transition shadow-inner">EN</button>
+            <span class="text-xs font-bold text-gray-500 truncate" id="wm-text-sidebar">Pixonal</span>
+        </div>
+    </aside>
+    
+    <div class="flex-1 flex flex-col h-screen overflow-hidden relative">
+        <header class="p-4 flex items-center justify-between bg-white/80 dark:bg-amoled-card/80 backdrop-blur-md border-b border-gray-200 dark:border-amoled-border md:hidden z-40">
+            <button onclick="document.getElementById('sidebar').classList.remove('translate-x-full')" class="text-gray-600 dark:text-gray-300 text-2xl font-bold">&#9776;</button>
+            <span class="font-bold text-lg">AX Panel</span>
+            <div class="w-8 flex justify-end"></div>
+        </header>
+        <div class="flex-1 overflow-y-auto" id="main-scroll">
+
     <header class="border-b border-gray-200 dark:border-amoled-border bg-white dark:bg-amoled-card px-4 py-4">
         <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
             <div class="flex flex-row flex-wrap justify-center items-center gap-3 w-full md:w-auto">
                 <h1 class="text-lg font-bold flex items-center gap-2" dir="ltr">
                     AX Panel 
-                    <span id="panel-version" class="text-xs px-2 py-0.5 font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 rounded-full">v1.6.0</span>
+                    <span id="panel-version" class="text-xs px-2 py-0.5 font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 rounded-full">v1.5.10</span>
                 </h1>
                 <div class="flex items-center gap-3 bg-gray-100 dark:bg-zinc-800/60 px-3 py-1.5 rounded-full border border-gray-200 dark:border-zinc-800/80 shadow-sm flex-shrink-0 w-fit">
                     <a href="https://github.com/aavsvs80-coder/axon_net" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition-all transform hover:scale-125 duration-200 flex-shrink-0" title="GitHub">
                         <svg class="w-[22px] h-[22px] flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
+                        </svg>
+                    </a>
+                    <a href="https://t.me/AX_PANEL_BOT" target="_blank" rel="noopener noreferrer" class="text-sky-500 hover:text-sky-600 dark:hover:text-sky-400 transition-all transform hover:scale-125 duration-200 flex-shrink-0" title="Telegram">
+                        <svg class="w-[22px] h-[22px] flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.94-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.37.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .24z"/>
                         </svg>
                     </a>
                 </div>
@@ -3625,7 +4141,232 @@ const HTML_TEMPLATES = {
         </div>
     </div>
 </div>
-    <script>
+    
+<div id="groups-tab" class="hidden max-w-4xl mx-auto px-4 py-8">
+    <h2 class="text-2xl font-black mb-6 text-amber-500" data-i18n="مدیریت گروه‌ها">مدیریت گروه‌ها</h2>
+    <div class="bg-white dark:bg-amoled-card p-6 rounded-2xl border border-gray-200 dark:border-amoled-border shadow-sm mb-8">
+        <h3 class="text-lg font-bold mb-4" data-i18n="ساخت گروه جدید">ساخت گروه جدید</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div><label class="text-sm font-medium" data-i18n="نام گروه">نام گروه</label><input type="text" id="grp-name" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <div><label class="text-sm font-medium" data-i18n="حجم کل (GB) - اختیاری">حجم کل (GB) - اختیاری</label><input type="number" id="grp-gb" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <div><label class="text-sm font-medium" data-i18n="تعداد ریکوئست کلودفلر">تعداد ریکوئست کلودفلر</label><input type="number" id="grp-req" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <div><label class="text-sm font-medium" data-i18n="پورت‌های مجاز">پورت‌های مجاز (با ویرگول جدا کنید)</label><input type="text" id="grp-ports" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm" placeholder="443, 8443, 2053" value="443,8443,2053,2083,2087,2096"></div>
+        </div>
+        <button onclick="createGroup()" class="mt-4 px-6 py-2 bg-amber-500 text-white font-bold rounded-lg hover:bg-amber-600 transition" data-i18n="ذخیره گروه">ذخیره گروه</button>
+    </div>
+    <div id="groups-list" class="space-y-3"></div>
+</div>
+
+<div id="settings-tab" class="hidden max-w-4xl mx-auto px-4 py-8">
+    <h2 class="text-2xl font-black mb-6 text-sky-500" data-i18n="تنظیمات و واترمارک">تنظیمات و واترمارک</h2>
+    <div class="bg-white dark:bg-amoled-card p-6 rounded-2xl border border-gray-200 dark:border-amoled-border shadow-sm mb-6">
+        <h3 class="text-lg font-bold mb-4" data-i18n="واترمارک اختصاصی">واترمارک اختصاصی</h3>
+        <p class="text-sm text-gray-500 mb-4" data-i18n="شرح واترمارک">کد لایسنس شما:</p>
+        <div class="p-3 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-lg font-mono text-xs mb-4 text-center break-all select-all text-sky-500" id="wm-secret-display">در حال بارگذاری...</div>
+        <div class="space-y-4">
+            <div><label class="text-sm font-medium text-rose-500" data-i18n="کد لایسنس 32 رقمی">کد لایسنس 32 رقمی</label><input type="password" id="wm-key" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm font-mono text-center" placeholder="کد لایسنس خود را وارد کنید"></div>
+            <div><label class="text-sm font-medium" data-i18n="متن واترمارک">متن واترمارک</label><input type="text" id="wm-text" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm" placeholder="مثلا: ساخته شده توسط علی"></div>
+            <button onclick="updateWatermark()" class="px-6 py-2 bg-sky-500 text-white font-bold rounded-lg hover:bg-sky-600 transition" data-i18n="تغییر واترمارک">تغییر واترمارک</button>
+        </div>
+    </div>
+    <div class="bg-white dark:bg-amoled-card p-6 rounded-2xl border border-gray-200 dark:border-amoled-border shadow-sm">
+        <h3 class="text-lg font-bold mb-4" data-i18n="تغییر رمز عبور پنل">تغییر رمز عبور پنل</h3>
+        <div class="space-y-4">
+            <div><label class="text-sm font-medium" data-i18n="رمز فعلی">رمز فعلی</label><input type="password" id="cp-old" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <div><label class="text-sm font-medium" data-i18n="رمز جدید">رمز جدید</label><input type="password" id="cp-new" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <button onclick="changePassword()" class="px-6 py-2 bg-sky-500 text-white font-bold rounded-lg hover:bg-sky-600 transition" data-i18n="تغییر رمز">تغییر رمز</button>
+        </div>
+    </div>
+</div>
+
+<div id="buy-tab" class="hidden max-w-4xl mx-auto px-4 py-8">
+    <h2 class="text-2xl font-black mb-6 text-green-500" data-i18n="خرید پنل کامل / حمایت">خرید پنل کامل / حمایت</h2>
+    <div class="bg-white dark:bg-amoled-card p-6 rounded-2xl border border-gray-200 dark:border-amoled-border shadow-sm text-center">
+        <h3 class="text-xl font-bold mb-2">نسخه کامل AX Panel</h3>
+        <p class="text-gray-500 dark:text-zinc-400 mb-6 leading-relaxed">
+            این پنل در حال توسعه مداوم است. برای دسترسی به آپدیت‌های اختصاصی، رفع باگ‌ها، و امکانات فوق‌پیشرفته می‌توانید نسخه ویژه را تهیه کنید یا از پروژه حمایت مالی کنید.
+        </p>
+        <a href="https://t.me/AX_PANEL_BOT" target="_blank" class="inline-block px-8 py-3 bg-sky-500 text-white font-bold rounded-xl shadow-lg shadow-sky-500/30 hover:scale-105 transition-transform duration-200" data-i18n="ارتباط با ربات تلگرام">ارتباط با توسعه دهنده در تلگرام</a>
+        <a href="https://donatonion.ir-netlify.workers.dev" target="_blank" class="inline-block mt-4 md:mt-0 md:mr-4 px-8 py-3 bg-rose-500 text-white font-bold rounded-xl shadow-lg shadow-rose-500/30 hover:scale-105 transition-transform duration-200" data-i18n="حمایت مالی از پروژه">حمایت مالی از پروژه</a>
+    </div>
+</div>
+</div>
+</div>
+
+<script>
+
+        let groupsData = [];
+        let watermarkData = "ساخته شده توسط Pixonal";
+        let currentLang = 'fa';
+
+        const i18nDict = {
+            'مدیریت گروه‌ها': 'Group Management',
+            'ساخت گروه جدید': 'Create New Group',
+            'نام گروه': 'Group Name',
+            'حجم کل (GB) - اختیاری': 'Total Limit (GB) - Optional',
+            'تعداد ریکوئست کلودفلر': 'Cloudflare Request Limit',
+            'پورت‌های مجاز': 'Allowed Ports (comma separated)',
+            'ذخیره گروه': 'Save Group',
+            'تنظیمات و واترمارک': 'Settings & Watermark',
+            'واترمارک اختصاصی': 'Custom Watermark',
+            'شرح واترمارک': 'Your License Code:',
+            'کد لایسنس 32 رقمی': '32-Character License Code',
+            'متن واترمارک': 'Watermark Text',
+            'تغییر واترمارک': 'Change Watermark',
+            'تغییر رمز عبور پنل': 'Change Panel Password',
+            'رمز فعلی': 'Current Password',
+            'رمز جدید': 'New Password',
+            'تغییر رمز': 'Change Password',
+            'خرید پنل کامل / حمایت': 'Buy Full Panel / Support',
+            'ارتباط با ربات تلگرام': 'Contact Developer on Telegram',
+            'حمایت مالی از پروژه': 'Financial Support'
+        };
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'fa' ? 'en' : 'fa';
+            document.body.setAttribute('dir', currentLang === 'fa' ? 'rtl' : 'ltr');
+            document.getElementById('lang-btn').innerText = currentLang === 'fa' ? 'EN' : 'FA';
+            
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if(currentLang === 'en' && i18nDict[key]) {
+                    if(!el.getAttribute('data-orig')) el.setAttribute('data-orig', el.innerText);
+                    el.innerText = i18nDict[key];
+                } else if(currentLang === 'fa' && el.getAttribute('data-orig')) {
+                    el.innerText = el.getAttribute('data-orig');
+                }
+            });
+        }
+
+        function showDashboard() {
+            document.querySelector('main').classList.remove('hidden');
+            document.getElementById('groups-tab').classList.add('hidden');
+            document.getElementById('settings-tab').classList.add('hidden');
+            document.getElementById('buy-tab').classList.add('hidden');
+        }
+        function showGroupsTab() {
+            document.querySelector('main').classList.add('hidden');
+            document.getElementById('groups-tab').classList.remove('hidden');
+            document.getElementById('settings-tab').classList.add('hidden');
+            document.getElementById('buy-tab').classList.add('hidden');
+            fetchGroups();
+        }
+        function showSettingsTab() {
+            document.querySelector('main').classList.add('hidden');
+            document.getElementById('groups-tab').classList.add('hidden');
+            document.getElementById('settings-tab').classList.remove('hidden');
+            document.getElementById('buy-tab').classList.add('hidden');
+            fetchWatermark();
+        }
+        function showBuyTab() {
+            document.querySelector('main').classList.add('hidden');
+            document.getElementById('groups-tab').classList.add('hidden');
+            document.getElementById('settings-tab').classList.add('hidden');
+            document.getElementById('buy-tab').classList.remove('hidden');
+        }
+
+        async function fetchGroups() {
+            try {
+                const res = await fetch('/api/groups');
+                groupsData = await res.json() || [];
+                renderGroups();
+                renderGroupSelector();
+            } catch(e){}
+        }
+
+        function renderGroups() {
+            const container = document.getElementById('groups-list');
+            container.innerHTML = groupsData.map(g => `
+                <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 rounded-xl">
+                    <div>
+                        <div class="font-bold text-sm text-indigo-500">${g.name}</div>
+                        <div class="text-xs text-gray-500 mt-1">حجم: ${g.limit_gb || 'نامحدود'} GB | ریکوئست: ${g.limit_req || 'نامحدود'} | پورت‌ها: ${g.ports}</div>
+                    </div>
+                    <button onclick="deleteGroup(${g.id})" class="text-rose-500 hover:text-rose-600 font-bold text-xs bg-rose-50 dark:bg-rose-900/20 px-3 py-1.5 rounded-lg">حذف</button>
+                </div>
+            `).join('');
+        }
+
+        async function createGroup() {
+            const name = document.getElementById('grp-name').value;
+            const limit_gb = document.getElementById('grp-gb').value;
+            const limit_req = document.getElementById('grp-req').value;
+            const ports = document.getElementById('grp-ports').value;
+            if(!name) return showToast('نام گروه الزامی است', 'error');
+            await fetch('/api/groups', { method: 'POST', body: JSON.stringify({name, limit_gb, limit_req, ports}) });
+            document.getElementById('grp-name').value = '';
+            showToast('گروه اضافه شد');
+            fetchGroups();
+        }
+
+        async function deleteGroup(id) {
+            if(!confirm('مطمئن هستید؟ کاربرهای این گروه بدون گروه خواهند شد.')) return;
+            await fetch('/api/groups/' + id, { method: 'DELETE' });
+            showToast('گروه حذف شد');
+            fetchGroups();
+        }
+
+        async function fetchWatermark() {
+            try {
+                const res = await fetch('/api/watermark');
+                const data = await res.json();
+                watermarkData = data.text || '';
+                document.getElementById('wm-text').value = watermarkData;
+                document.getElementById('wm-text-sidebar').innerText = watermarkData;
+                document.getElementById('wm-secret-display').innerText = data.secret;
+            } catch(e){}
+        }
+
+        async function updateWatermark() {
+            const key = document.getElementById('wm-key').value;
+            const text = document.getElementById('wm-text').value;
+            if(!key) return showToast('کد لایسنس را وارد کنید', 'error');
+            const res = await fetch('/api/watermark', { method: 'POST', body: JSON.stringify({text, key}) });
+            if(res.ok) {
+                showToast('واترمارک تغییر یافت');
+                fetchWatermark();
+            } else {
+                const err = await res.json();
+                showToast(err.error || 'خطا در لایسنس', 'error');
+            }
+        }
+        
+        async function changePassword() {
+            const oldPass = document.getElementById('cp-old').value;
+            const newPass = document.getElementById('cp-new').value;
+            if(!oldPass || !newPass) return showToast('فیلدها را پر کنید', 'error');
+            const res = await fetch('/api/change-password', { method: 'POST', body: JSON.stringify({old_password: oldPass, new_password: newPass}) });
+            if(res.ok) {
+                showToast('رمز تغییر یافت');
+                setTimeout(()=>location.reload(), 1000);
+            } else {
+                showToast('رمز فعلی اشتباه است', 'error');
+            }
+        }
+
+        function renderGroupSelector() {
+            const sel = document.getElementById('user-group');
+            if(!sel) return;
+            const currentVal = sel.value;
+            sel.innerHTML = '<option value="">-- بدون گروه (تنظیم دستی) --</option>' + groupsData.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+            sel.value = currentVal;
+            
+            sel.onchange = (e) => {
+                const gid = parseInt(e.target.value);
+                const g = groupsData.find(x => x.id === gid);
+                if(g) {
+                    if(g.limit_gb) document.getElementById('limit').value = g.limit_gb;
+                    if(g.limit_req) document.getElementById('limit-req').value = g.limit_req;
+                    if(g.ports) {
+                        const portsArr = g.ports.split(',').map(x=>x.trim());
+                        document.querySelectorAll('input[name="ports"]').forEach(cb => {
+                            cb.checked = portsArr.includes(cb.value);
+                        });
+                    }
+                }
+            };
+        }
+
 		function showToast(message, type = 'success') {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
@@ -4701,8 +5442,8 @@ function getVlessLink(username) {
             const fp = user.fingerprint || 'chrome';
             const userFrag = (user.frag_len && user.frag_int) ? '&fragment=' + user.frag_len + ',' + user.frag_int : '';
             const links = [];
-            const m1 = "ساخته شده توسط Pixonal";
-            const m2 = "ساخته شده توسط Pixonal";
+            const m1 = watermarkData;
+            const m2 = watermarkData;
             links.push('vle' + 'ss://' + (user.uuid || '') + '@0.0.0.0:1?encryption=none&security=none&type=ws&host=' + host + '&path=%2Fax_ws#' + encodeURIComponent(m1));
             links.push('vle' + 'ss://' + (user.uuid || '') + '@0.0.0.0:1?encryption=none&security=none&type=ws&host=' + host + '&path=%2Fax_ws#' + encodeURIComponent(m2));
             ips.forEach((ip) => {
@@ -5435,7 +6176,7 @@ window.filterLocations = function() {
                 window.location.reload();
             }
         }
-const CURRENT_VERSION = '1.7.7';
+const CURRENT_VERSION = '1.7.6';
 const UPDATE_FIX = "constsCURRENT_VERSION='d.d.d'";
 		async function checkForUpdates(isManual = false) {
             try {
@@ -5643,6 +6384,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const versionBadge = document.getElementById('panel-version');
             if (versionBadge) versionBadge.innerText = 'v' + CURRENT_VERSION;
             renderPortCheckboxes();
+            fetchWatermark(); fetchGroups();
             loadUsers();
             loadLocations();
             
@@ -5948,7 +6690,232 @@ window.addEventListener('click', (e) => {
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
-    <script>
+    
+<div id="groups-tab" class="hidden max-w-4xl mx-auto px-4 py-8">
+    <h2 class="text-2xl font-black mb-6 text-amber-500" data-i18n="مدیریت گروه‌ها">مدیریت گروه‌ها</h2>
+    <div class="bg-white dark:bg-amoled-card p-6 rounded-2xl border border-gray-200 dark:border-amoled-border shadow-sm mb-8">
+        <h3 class="text-lg font-bold mb-4" data-i18n="ساخت گروه جدید">ساخت گروه جدید</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div><label class="text-sm font-medium" data-i18n="نام گروه">نام گروه</label><input type="text" id="grp-name" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <div><label class="text-sm font-medium" data-i18n="حجم کل (GB) - اختیاری">حجم کل (GB) - اختیاری</label><input type="number" id="grp-gb" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <div><label class="text-sm font-medium" data-i18n="تعداد ریکوئست کلودفلر">تعداد ریکوئست کلودفلر</label><input type="number" id="grp-req" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <div><label class="text-sm font-medium" data-i18n="پورت‌های مجاز">پورت‌های مجاز (با ویرگول جدا کنید)</label><input type="text" id="grp-ports" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm" placeholder="443, 8443, 2053" value="443,8443,2053,2083,2087,2096"></div>
+        </div>
+        <button onclick="createGroup()" class="mt-4 px-6 py-2 bg-amber-500 text-white font-bold rounded-lg hover:bg-amber-600 transition" data-i18n="ذخیره گروه">ذخیره گروه</button>
+    </div>
+    <div id="groups-list" class="space-y-3"></div>
+</div>
+
+<div id="settings-tab" class="hidden max-w-4xl mx-auto px-4 py-8">
+    <h2 class="text-2xl font-black mb-6 text-sky-500" data-i18n="تنظیمات و واترمارک">تنظیمات و واترمارک</h2>
+    <div class="bg-white dark:bg-amoled-card p-6 rounded-2xl border border-gray-200 dark:border-amoled-border shadow-sm mb-6">
+        <h3 class="text-lg font-bold mb-4" data-i18n="واترمارک اختصاصی">واترمارک اختصاصی</h3>
+        <p class="text-sm text-gray-500 mb-4" data-i18n="شرح واترمارک">کد لایسنس شما:</p>
+        <div class="p-3 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-lg font-mono text-xs mb-4 text-center break-all select-all text-sky-500" id="wm-secret-display">در حال بارگذاری...</div>
+        <div class="space-y-4">
+            <div><label class="text-sm font-medium text-rose-500" data-i18n="کد لایسنس 32 رقمی">کد لایسنس 32 رقمی</label><input type="password" id="wm-key" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm font-mono text-center" placeholder="کد لایسنس خود را وارد کنید"></div>
+            <div><label class="text-sm font-medium" data-i18n="متن واترمارک">متن واترمارک</label><input type="text" id="wm-text" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm" placeholder="مثلا: ساخته شده توسط علی"></div>
+            <button onclick="updateWatermark()" class="px-6 py-2 bg-sky-500 text-white font-bold rounded-lg hover:bg-sky-600 transition" data-i18n="تغییر واترمارک">تغییر واترمارک</button>
+        </div>
+    </div>
+    <div class="bg-white dark:bg-amoled-card p-6 rounded-2xl border border-gray-200 dark:border-amoled-border shadow-sm">
+        <h3 class="text-lg font-bold mb-4" data-i18n="تغییر رمز عبور پنل">تغییر رمز عبور پنل</h3>
+        <div class="space-y-4">
+            <div><label class="text-sm font-medium" data-i18n="رمز فعلی">رمز فعلی</label><input type="password" id="cp-old" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <div><label class="text-sm font-medium" data-i18n="رمز جدید">رمز جدید</label><input type="password" id="cp-new" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <button onclick="changePassword()" class="px-6 py-2 bg-sky-500 text-white font-bold rounded-lg hover:bg-sky-600 transition" data-i18n="تغییر رمز">تغییر رمز</button>
+        </div>
+    </div>
+</div>
+
+<div id="buy-tab" class="hidden max-w-4xl mx-auto px-4 py-8">
+    <h2 class="text-2xl font-black mb-6 text-green-500" data-i18n="خرید پنل کامل / حمایت">خرید پنل کامل / حمایت</h2>
+    <div class="bg-white dark:bg-amoled-card p-6 rounded-2xl border border-gray-200 dark:border-amoled-border shadow-sm text-center">
+        <h3 class="text-xl font-bold mb-2">نسخه کامل AX Panel</h3>
+        <p class="text-gray-500 dark:text-zinc-400 mb-6 leading-relaxed">
+            این پنل در حال توسعه مداوم است. برای دسترسی به آپدیت‌های اختصاصی، رفع باگ‌ها، و امکانات فوق‌پیشرفته می‌توانید نسخه ویژه را تهیه کنید یا از پروژه حمایت مالی کنید.
+        </p>
+        <a href="https://t.me/AX_PANEL_BOT" target="_blank" class="inline-block px-8 py-3 bg-sky-500 text-white font-bold rounded-xl shadow-lg shadow-sky-500/30 hover:scale-105 transition-transform duration-200" data-i18n="ارتباط با ربات تلگرام">ارتباط با توسعه دهنده در تلگرام</a>
+        <a href="https://donatonion.ir-netlify.workers.dev" target="_blank" class="inline-block mt-4 md:mt-0 md:mr-4 px-8 py-3 bg-rose-500 text-white font-bold rounded-xl shadow-lg shadow-rose-500/30 hover:scale-105 transition-transform duration-200" data-i18n="حمایت مالی از پروژه">حمایت مالی از پروژه</a>
+    </div>
+</div>
+</div>
+</div>
+
+<script>
+
+        let groupsData = [];
+        let watermarkData = "ساخته شده توسط Pixonal";
+        let currentLang = 'fa';
+
+        const i18nDict = {
+            'مدیریت گروه‌ها': 'Group Management',
+            'ساخت گروه جدید': 'Create New Group',
+            'نام گروه': 'Group Name',
+            'حجم کل (GB) - اختیاری': 'Total Limit (GB) - Optional',
+            'تعداد ریکوئست کلودفلر': 'Cloudflare Request Limit',
+            'پورت‌های مجاز': 'Allowed Ports (comma separated)',
+            'ذخیره گروه': 'Save Group',
+            'تنظیمات و واترمارک': 'Settings & Watermark',
+            'واترمارک اختصاصی': 'Custom Watermark',
+            'شرح واترمارک': 'Your License Code:',
+            'کد لایسنس 32 رقمی': '32-Character License Code',
+            'متن واترمارک': 'Watermark Text',
+            'تغییر واترمارک': 'Change Watermark',
+            'تغییر رمز عبور پنل': 'Change Panel Password',
+            'رمز فعلی': 'Current Password',
+            'رمز جدید': 'New Password',
+            'تغییر رمز': 'Change Password',
+            'خرید پنل کامل / حمایت': 'Buy Full Panel / Support',
+            'ارتباط با ربات تلگرام': 'Contact Developer on Telegram',
+            'حمایت مالی از پروژه': 'Financial Support'
+        };
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'fa' ? 'en' : 'fa';
+            document.body.setAttribute('dir', currentLang === 'fa' ? 'rtl' : 'ltr');
+            document.getElementById('lang-btn').innerText = currentLang === 'fa' ? 'EN' : 'FA';
+            
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if(currentLang === 'en' && i18nDict[key]) {
+                    if(!el.getAttribute('data-orig')) el.setAttribute('data-orig', el.innerText);
+                    el.innerText = i18nDict[key];
+                } else if(currentLang === 'fa' && el.getAttribute('data-orig')) {
+                    el.innerText = el.getAttribute('data-orig');
+                }
+            });
+        }
+
+        function showDashboard() {
+            document.querySelector('main').classList.remove('hidden');
+            document.getElementById('groups-tab').classList.add('hidden');
+            document.getElementById('settings-tab').classList.add('hidden');
+            document.getElementById('buy-tab').classList.add('hidden');
+        }
+        function showGroupsTab() {
+            document.querySelector('main').classList.add('hidden');
+            document.getElementById('groups-tab').classList.remove('hidden');
+            document.getElementById('settings-tab').classList.add('hidden');
+            document.getElementById('buy-tab').classList.add('hidden');
+            fetchGroups();
+        }
+        function showSettingsTab() {
+            document.querySelector('main').classList.add('hidden');
+            document.getElementById('groups-tab').classList.add('hidden');
+            document.getElementById('settings-tab').classList.remove('hidden');
+            document.getElementById('buy-tab').classList.add('hidden');
+            fetchWatermark();
+        }
+        function showBuyTab() {
+            document.querySelector('main').classList.add('hidden');
+            document.getElementById('groups-tab').classList.add('hidden');
+            document.getElementById('settings-tab').classList.add('hidden');
+            document.getElementById('buy-tab').classList.remove('hidden');
+        }
+
+        async function fetchGroups() {
+            try {
+                const res = await fetch('/api/groups');
+                groupsData = await res.json() || [];
+                renderGroups();
+                renderGroupSelector();
+            } catch(e){}
+        }
+
+        function renderGroups() {
+            const container = document.getElementById('groups-list');
+            container.innerHTML = groupsData.map(g => `
+                <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 rounded-xl">
+                    <div>
+                        <div class="font-bold text-sm text-indigo-500">${g.name}</div>
+                        <div class="text-xs text-gray-500 mt-1">حجم: ${g.limit_gb || 'نامحدود'} GB | ریکوئست: ${g.limit_req || 'نامحدود'} | پورت‌ها: ${g.ports}</div>
+                    </div>
+                    <button onclick="deleteGroup(${g.id})" class="text-rose-500 hover:text-rose-600 font-bold text-xs bg-rose-50 dark:bg-rose-900/20 px-3 py-1.5 rounded-lg">حذف</button>
+                </div>
+            `).join('');
+        }
+
+        async function createGroup() {
+            const name = document.getElementById('grp-name').value;
+            const limit_gb = document.getElementById('grp-gb').value;
+            const limit_req = document.getElementById('grp-req').value;
+            const ports = document.getElementById('grp-ports').value;
+            if(!name) return showToast('نام گروه الزامی است', 'error');
+            await fetch('/api/groups', { method: 'POST', body: JSON.stringify({name, limit_gb, limit_req, ports}) });
+            document.getElementById('grp-name').value = '';
+            showToast('گروه اضافه شد');
+            fetchGroups();
+        }
+
+        async function deleteGroup(id) {
+            if(!confirm('مطمئن هستید؟ کاربرهای این گروه بدون گروه خواهند شد.')) return;
+            await fetch('/api/groups/' + id, { method: 'DELETE' });
+            showToast('گروه حذف شد');
+            fetchGroups();
+        }
+
+        async function fetchWatermark() {
+            try {
+                const res = await fetch('/api/watermark');
+                const data = await res.json();
+                watermarkData = data.text || '';
+                document.getElementById('wm-text').value = watermarkData;
+                document.getElementById('wm-text-sidebar').innerText = watermarkData;
+                document.getElementById('wm-secret-display').innerText = data.secret;
+            } catch(e){}
+        }
+
+        async function updateWatermark() {
+            const key = document.getElementById('wm-key').value;
+            const text = document.getElementById('wm-text').value;
+            if(!key) return showToast('کد لایسنس را وارد کنید', 'error');
+            const res = await fetch('/api/watermark', { method: 'POST', body: JSON.stringify({text, key}) });
+            if(res.ok) {
+                showToast('واترمارک تغییر یافت');
+                fetchWatermark();
+            } else {
+                const err = await res.json();
+                showToast(err.error || 'خطا در لایسنس', 'error');
+            }
+        }
+        
+        async function changePassword() {
+            const oldPass = document.getElementById('cp-old').value;
+            const newPass = document.getElementById('cp-new').value;
+            if(!oldPass || !newPass) return showToast('فیلدها را پر کنید', 'error');
+            const res = await fetch('/api/change-password', { method: 'POST', body: JSON.stringify({old_password: oldPass, new_password: newPass}) });
+            if(res.ok) {
+                showToast('رمز تغییر یافت');
+                setTimeout(()=>location.reload(), 1000);
+            } else {
+                showToast('رمز فعلی اشتباه است', 'error');
+            }
+        }
+
+        function renderGroupSelector() {
+            const sel = document.getElementById('user-group');
+            if(!sel) return;
+            const currentVal = sel.value;
+            sel.innerHTML = '<option value="">-- بدون گروه (تنظیم دستی) --</option>' + groupsData.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+            sel.value = currentVal;
+            
+            sel.onchange = (e) => {
+                const gid = parseInt(e.target.value);
+                const g = groupsData.find(x => x.id === gid);
+                if(g) {
+                    if(g.limit_gb) document.getElementById('limit').value = g.limit_gb;
+                    if(g.limit_req) document.getElementById('limit-req').value = g.limit_req;
+                    if(g.ports) {
+                        const portsArr = g.ports.split(',').map(x=>x.trim());
+                        document.querySelectorAll('input[name="ports"]').forEach(cb => {
+                            cb.checked = portsArr.includes(cb.value);
+                        });
+                    }
+                }
+            };
+        }
+
         tailwind.config = {
             darkMode: 'class',
             theme: {
@@ -6091,7 +7058,232 @@ window.addEventListener('click', (e) => {
     </div>
 </div>
 <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 pointer-events-none"></div>
-    <script>
+    
+<div id="groups-tab" class="hidden max-w-4xl mx-auto px-4 py-8">
+    <h2 class="text-2xl font-black mb-6 text-amber-500" data-i18n="مدیریت گروه‌ها">مدیریت گروه‌ها</h2>
+    <div class="bg-white dark:bg-amoled-card p-6 rounded-2xl border border-gray-200 dark:border-amoled-border shadow-sm mb-8">
+        <h3 class="text-lg font-bold mb-4" data-i18n="ساخت گروه جدید">ساخت گروه جدید</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div><label class="text-sm font-medium" data-i18n="نام گروه">نام گروه</label><input type="text" id="grp-name" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <div><label class="text-sm font-medium" data-i18n="حجم کل (GB) - اختیاری">حجم کل (GB) - اختیاری</label><input type="number" id="grp-gb" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <div><label class="text-sm font-medium" data-i18n="تعداد ریکوئست کلودفلر">تعداد ریکوئست کلودفلر</label><input type="number" id="grp-req" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <div><label class="text-sm font-medium" data-i18n="پورت‌های مجاز">پورت‌های مجاز (با ویرگول جدا کنید)</label><input type="text" id="grp-ports" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm" placeholder="443, 8443, 2053" value="443,8443,2053,2083,2087,2096"></div>
+        </div>
+        <button onclick="createGroup()" class="mt-4 px-6 py-2 bg-amber-500 text-white font-bold rounded-lg hover:bg-amber-600 transition" data-i18n="ذخیره گروه">ذخیره گروه</button>
+    </div>
+    <div id="groups-list" class="space-y-3"></div>
+</div>
+
+<div id="settings-tab" class="hidden max-w-4xl mx-auto px-4 py-8">
+    <h2 class="text-2xl font-black mb-6 text-sky-500" data-i18n="تنظیمات و واترمارک">تنظیمات و واترمارک</h2>
+    <div class="bg-white dark:bg-amoled-card p-6 rounded-2xl border border-gray-200 dark:border-amoled-border shadow-sm mb-6">
+        <h3 class="text-lg font-bold mb-4" data-i18n="واترمارک اختصاصی">واترمارک اختصاصی</h3>
+        <p class="text-sm text-gray-500 mb-4" data-i18n="شرح واترمارک">کد لایسنس شما:</p>
+        <div class="p-3 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-lg font-mono text-xs mb-4 text-center break-all select-all text-sky-500" id="wm-secret-display">در حال بارگذاری...</div>
+        <div class="space-y-4">
+            <div><label class="text-sm font-medium text-rose-500" data-i18n="کد لایسنس 32 رقمی">کد لایسنس 32 رقمی</label><input type="password" id="wm-key" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm font-mono text-center" placeholder="کد لایسنس خود را وارد کنید"></div>
+            <div><label class="text-sm font-medium" data-i18n="متن واترمارک">متن واترمارک</label><input type="text" id="wm-text" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm" placeholder="مثلا: ساخته شده توسط علی"></div>
+            <button onclick="updateWatermark()" class="px-6 py-2 bg-sky-500 text-white font-bold rounded-lg hover:bg-sky-600 transition" data-i18n="تغییر واترمارک">تغییر واترمارک</button>
+        </div>
+    </div>
+    <div class="bg-white dark:bg-amoled-card p-6 rounded-2xl border border-gray-200 dark:border-amoled-border shadow-sm">
+        <h3 class="text-lg font-bold mb-4" data-i18n="تغییر رمز عبور پنل">تغییر رمز عبور پنل</h3>
+        <div class="space-y-4">
+            <div><label class="text-sm font-medium" data-i18n="رمز فعلی">رمز فعلی</label><input type="password" id="cp-old" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <div><label class="text-sm font-medium" data-i18n="رمز جدید">رمز جدید</label><input type="password" id="cp-new" class="w-full mt-1 p-2 rounded-lg bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 text-sm"></div>
+            <button onclick="changePassword()" class="px-6 py-2 bg-sky-500 text-white font-bold rounded-lg hover:bg-sky-600 transition" data-i18n="تغییر رمز">تغییر رمز</button>
+        </div>
+    </div>
+</div>
+
+<div id="buy-tab" class="hidden max-w-4xl mx-auto px-4 py-8">
+    <h2 class="text-2xl font-black mb-6 text-green-500" data-i18n="خرید پنل کامل / حمایت">خرید پنل کامل / حمایت</h2>
+    <div class="bg-white dark:bg-amoled-card p-6 rounded-2xl border border-gray-200 dark:border-amoled-border shadow-sm text-center">
+        <h3 class="text-xl font-bold mb-2">نسخه کامل AX Panel</h3>
+        <p class="text-gray-500 dark:text-zinc-400 mb-6 leading-relaxed">
+            این پنل در حال توسعه مداوم است. برای دسترسی به آپدیت‌های اختصاصی، رفع باگ‌ها، و امکانات فوق‌پیشرفته می‌توانید نسخه ویژه را تهیه کنید یا از پروژه حمایت مالی کنید.
+        </p>
+        <a href="https://t.me/AX_PANEL_BOT" target="_blank" class="inline-block px-8 py-3 bg-sky-500 text-white font-bold rounded-xl shadow-lg shadow-sky-500/30 hover:scale-105 transition-transform duration-200" data-i18n="ارتباط با ربات تلگرام">ارتباط با توسعه دهنده در تلگرام</a>
+        <a href="https://donatonion.ir-netlify.workers.dev" target="_blank" class="inline-block mt-4 md:mt-0 md:mr-4 px-8 py-3 bg-rose-500 text-white font-bold rounded-xl shadow-lg shadow-rose-500/30 hover:scale-105 transition-transform duration-200" data-i18n="حمایت مالی از پروژه">حمایت مالی از پروژه</a>
+    </div>
+</div>
+</div>
+</div>
+
+<script>
+
+        let groupsData = [];
+        let watermarkData = "ساخته شده توسط Pixonal";
+        let currentLang = 'fa';
+
+        const i18nDict = {
+            'مدیریت گروه‌ها': 'Group Management',
+            'ساخت گروه جدید': 'Create New Group',
+            'نام گروه': 'Group Name',
+            'حجم کل (GB) - اختیاری': 'Total Limit (GB) - Optional',
+            'تعداد ریکوئست کلودفلر': 'Cloudflare Request Limit',
+            'پورت‌های مجاز': 'Allowed Ports (comma separated)',
+            'ذخیره گروه': 'Save Group',
+            'تنظیمات و واترمارک': 'Settings & Watermark',
+            'واترمارک اختصاصی': 'Custom Watermark',
+            'شرح واترمارک': 'Your License Code:',
+            'کد لایسنس 32 رقمی': '32-Character License Code',
+            'متن واترمارک': 'Watermark Text',
+            'تغییر واترمارک': 'Change Watermark',
+            'تغییر رمز عبور پنل': 'Change Panel Password',
+            'رمز فعلی': 'Current Password',
+            'رمز جدید': 'New Password',
+            'تغییر رمز': 'Change Password',
+            'خرید پنل کامل / حمایت': 'Buy Full Panel / Support',
+            'ارتباط با ربات تلگرام': 'Contact Developer on Telegram',
+            'حمایت مالی از پروژه': 'Financial Support'
+        };
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'fa' ? 'en' : 'fa';
+            document.body.setAttribute('dir', currentLang === 'fa' ? 'rtl' : 'ltr');
+            document.getElementById('lang-btn').innerText = currentLang === 'fa' ? 'EN' : 'FA';
+            
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if(currentLang === 'en' && i18nDict[key]) {
+                    if(!el.getAttribute('data-orig')) el.setAttribute('data-orig', el.innerText);
+                    el.innerText = i18nDict[key];
+                } else if(currentLang === 'fa' && el.getAttribute('data-orig')) {
+                    el.innerText = el.getAttribute('data-orig');
+                }
+            });
+        }
+
+        function showDashboard() {
+            document.querySelector('main').classList.remove('hidden');
+            document.getElementById('groups-tab').classList.add('hidden');
+            document.getElementById('settings-tab').classList.add('hidden');
+            document.getElementById('buy-tab').classList.add('hidden');
+        }
+        function showGroupsTab() {
+            document.querySelector('main').classList.add('hidden');
+            document.getElementById('groups-tab').classList.remove('hidden');
+            document.getElementById('settings-tab').classList.add('hidden');
+            document.getElementById('buy-tab').classList.add('hidden');
+            fetchGroups();
+        }
+        function showSettingsTab() {
+            document.querySelector('main').classList.add('hidden');
+            document.getElementById('groups-tab').classList.add('hidden');
+            document.getElementById('settings-tab').classList.remove('hidden');
+            document.getElementById('buy-tab').classList.add('hidden');
+            fetchWatermark();
+        }
+        function showBuyTab() {
+            document.querySelector('main').classList.add('hidden');
+            document.getElementById('groups-tab').classList.add('hidden');
+            document.getElementById('settings-tab').classList.add('hidden');
+            document.getElementById('buy-tab').classList.remove('hidden');
+        }
+
+        async function fetchGroups() {
+            try {
+                const res = await fetch('/api/groups');
+                groupsData = await res.json() || [];
+                renderGroups();
+                renderGroupSelector();
+            } catch(e){}
+        }
+
+        function renderGroups() {
+            const container = document.getElementById('groups-list');
+            container.innerHTML = groupsData.map(g => `
+                <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 rounded-xl">
+                    <div>
+                        <div class="font-bold text-sm text-indigo-500">${g.name}</div>
+                        <div class="text-xs text-gray-500 mt-1">حجم: ${g.limit_gb || 'نامحدود'} GB | ریکوئست: ${g.limit_req || 'نامحدود'} | پورت‌ها: ${g.ports}</div>
+                    </div>
+                    <button onclick="deleteGroup(${g.id})" class="text-rose-500 hover:text-rose-600 font-bold text-xs bg-rose-50 dark:bg-rose-900/20 px-3 py-1.5 rounded-lg">حذف</button>
+                </div>
+            `).join('');
+        }
+
+        async function createGroup() {
+            const name = document.getElementById('grp-name').value;
+            const limit_gb = document.getElementById('grp-gb').value;
+            const limit_req = document.getElementById('grp-req').value;
+            const ports = document.getElementById('grp-ports').value;
+            if(!name) return showToast('نام گروه الزامی است', 'error');
+            await fetch('/api/groups', { method: 'POST', body: JSON.stringify({name, limit_gb, limit_req, ports}) });
+            document.getElementById('grp-name').value = '';
+            showToast('گروه اضافه شد');
+            fetchGroups();
+        }
+
+        async function deleteGroup(id) {
+            if(!confirm('مطمئن هستید؟ کاربرهای این گروه بدون گروه خواهند شد.')) return;
+            await fetch('/api/groups/' + id, { method: 'DELETE' });
+            showToast('گروه حذف شد');
+            fetchGroups();
+        }
+
+        async function fetchWatermark() {
+            try {
+                const res = await fetch('/api/watermark');
+                const data = await res.json();
+                watermarkData = data.text || '';
+                document.getElementById('wm-text').value = watermarkData;
+                document.getElementById('wm-text-sidebar').innerText = watermarkData;
+                document.getElementById('wm-secret-display').innerText = data.secret;
+            } catch(e){}
+        }
+
+        async function updateWatermark() {
+            const key = document.getElementById('wm-key').value;
+            const text = document.getElementById('wm-text').value;
+            if(!key) return showToast('کد لایسنس را وارد کنید', 'error');
+            const res = await fetch('/api/watermark', { method: 'POST', body: JSON.stringify({text, key}) });
+            if(res.ok) {
+                showToast('واترمارک تغییر یافت');
+                fetchWatermark();
+            } else {
+                const err = await res.json();
+                showToast(err.error || 'خطا در لایسنس', 'error');
+            }
+        }
+        
+        async function changePassword() {
+            const oldPass = document.getElementById('cp-old').value;
+            const newPass = document.getElementById('cp-new').value;
+            if(!oldPass || !newPass) return showToast('فیلدها را پر کنید', 'error');
+            const res = await fetch('/api/change-password', { method: 'POST', body: JSON.stringify({old_password: oldPass, new_password: newPass}) });
+            if(res.ok) {
+                showToast('رمز تغییر یافت');
+                setTimeout(()=>location.reload(), 1000);
+            } else {
+                showToast('رمز فعلی اشتباه است', 'error');
+            }
+        }
+
+        function renderGroupSelector() {
+            const sel = document.getElementById('user-group');
+            if(!sel) return;
+            const currentVal = sel.value;
+            sel.innerHTML = '<option value="">-- بدون گروه (تنظیم دستی) --</option>' + groupsData.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+            sel.value = currentVal;
+            
+            sel.onchange = (e) => {
+                const gid = parseInt(e.target.value);
+                const g = groupsData.find(x => x.id === gid);
+                if(g) {
+                    if(g.limit_gb) document.getElementById('limit').value = g.limit_gb;
+                    if(g.limit_req) document.getElementById('limit-req').value = g.limit_req;
+                    if(g.ports) {
+                        const portsArr = g.ports.split(',').map(x=>x.trim());
+                        document.querySelectorAll('input[name="ports"]').forEach(cb => {
+                            cb.checked = portsArr.includes(cb.value);
+                        });
+                    }
+                }
+            };
+        }
+
         /* {{USER_DATA_PLACEHOLDER}} */
         function showToast(message, type = 'success') {
             const container = document.getElementById('toast-container');
