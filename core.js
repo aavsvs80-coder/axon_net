@@ -2874,15 +2874,7 @@ const HTML_TEMPLATES = {
 
         function renderGroups() {
             const container = document.getElementById('groups-list');
-            container.innerHTML = groupsData.map(g => `
-                <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 rounded-xl">
-                    <div>
-                        <div class="font-bold text-sm text-indigo-500">${g.name}</div>
-                        <div class="text-xs text-gray-500 mt-1">حجم: ${g.limit_gb || 'نامحدود'} GB | ریکوئست: ${g.limit_req || 'نامحدود'} | پورت‌ها: ${g.ports}</div>
-                    </div>
-                    <button onclick="deleteGroup(${g.id})" class="text-rose-500 hover:text-rose-600 font-bold text-xs bg-rose-50 dark:bg-rose-900/20 px-3 py-1.5 rounded-lg">حذف</button>
-                </div>
-            `).join('');
+            container.innerHTML = groupsData.map(g => '<div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 rounded-xl"><div><div class="font-bold text-sm text-indigo-500">' + g.name + '</div><div class="text-xs text-gray-500 mt-1">حجم: ' + (g.limit_gb || 'نامحدود') + ' GB | ریکوئست: ' + (g.limit_req || 'نامحدود') + ' | پورت‌ها: ' + g.ports + '</div></div><button onclick="deleteGroup(' + g.id + ')" class="text-rose-500 hover:text-rose-600 font-bold text-xs bg-rose-50 dark:bg-rose-900/20 px-3 py-1.5 rounded-lg">حذف</button></div>').join('');
         }
 
         async function createGroup() {
@@ -2946,7 +2938,7 @@ const HTML_TEMPLATES = {
             const sel = document.getElementById('user-group');
             if(!sel) return;
             const currentVal = sel.value;
-            sel.innerHTML = '<option value="">-- بدون گروه (تنظیم دستی) --</option>' + groupsData.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+            sel.innerHTML = '<option value="">-- بدون گروه (تنظیم دستی) --</option>' + groupsData.map(g => '<option value="' + g.id + '">' + g.name + '</option>').join('');
             sel.value = currentVal;
             
             sel.onchange = (e) => {
@@ -3109,15 +3101,7 @@ const HTML_TEMPLATES = {
 
         function renderGroups() {
             const container = document.getElementById('groups-list');
-            container.innerHTML = groupsData.map(g => `
-                <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 rounded-xl">
-                    <div>
-                        <div class="font-bold text-sm text-indigo-500">${g.name}</div>
-                        <div class="text-xs text-gray-500 mt-1">حجم: ${g.limit_gb || 'نامحدود'} GB | ریکوئست: ${g.limit_req || 'نامحدود'} | پورت‌ها: ${g.ports}</div>
-                    </div>
-                    <button onclick="deleteGroup(${g.id})" class="text-rose-500 hover:text-rose-600 font-bold text-xs bg-rose-50 dark:bg-rose-900/20 px-3 py-1.5 rounded-lg">حذف</button>
-                </div>
-            `).join('');
+            container.innerHTML = groupsData.map(g => '<div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 rounded-xl"><div><div class="font-bold text-sm text-indigo-500">' + g.name + '</div><div class="text-xs text-gray-500 mt-1">حجم: ' + (g.limit_gb || 'نامحدود') + ' GB | ریکوئست: ' + (g.limit_req || 'نامحدود') + ' | پورت‌ها: ' + g.ports + '</div></div><button onclick="deleteGroup(' + g.id + ')" class="text-rose-500 hover:text-rose-600 font-bold text-xs bg-rose-50 dark:bg-rose-900/20 px-3 py-1.5 rounded-lg">حذف</button></div>').join('');
         }
 
         async function createGroup() {
@@ -3181,7 +3165,7 @@ const HTML_TEMPLATES = {
             const sel = document.getElementById('user-group');
             if(!sel) return;
             const currentVal = sel.value;
-            sel.innerHTML = '<option value="">-- بدون گروه (تنظیم دستی) --</option>' + groupsData.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+            sel.innerHTML = '<option value="">-- بدون گروه (تنظیم دستی) --</option>' + groupsData.map(g => '<option value="' + g.id + '">' + g.name + '</option>').join('');
             sel.value = currentVal;
             
             sel.onchange = (e) => {
@@ -4276,15 +4260,7 @@ const HTML_TEMPLATES = {
 
         function renderGroups() {
             const container = document.getElementById('groups-list');
-            container.innerHTML = groupsData.map(g => `
-                <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 rounded-xl">
-                    <div>
-                        <div class="font-bold text-sm text-indigo-500">${g.name}</div>
-                        <div class="text-xs text-gray-500 mt-1">حجم: ${g.limit_gb || 'نامحدود'} GB | ریکوئست: ${g.limit_req || 'نامحدود'} | پورت‌ها: ${g.ports}</div>
-                    </div>
-                    <button onclick="deleteGroup(${g.id})" class="text-rose-500 hover:text-rose-600 font-bold text-xs bg-rose-50 dark:bg-rose-900/20 px-3 py-1.5 rounded-lg">حذف</button>
-                </div>
-            `).join('');
+            container.innerHTML = groupsData.map(g => '<div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 rounded-xl"><div><div class="font-bold text-sm text-indigo-500">' + g.name + '</div><div class="text-xs text-gray-500 mt-1">حجم: ' + (g.limit_gb || 'نامحدود') + ' GB | ریکوئست: ' + (g.limit_req || 'نامحدود') + ' | پورت‌ها: ' + g.ports + '</div></div><button onclick="deleteGroup(' + g.id + ')" class="text-rose-500 hover:text-rose-600 font-bold text-xs bg-rose-50 dark:bg-rose-900/20 px-3 py-1.5 rounded-lg">حذف</button></div>').join('');
         }
 
         async function createGroup() {
@@ -4348,7 +4324,7 @@ const HTML_TEMPLATES = {
             const sel = document.getElementById('user-group');
             if(!sel) return;
             const currentVal = sel.value;
-            sel.innerHTML = '<option value="">-- بدون گروه (تنظیم دستی) --</option>' + groupsData.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+            sel.innerHTML = '<option value="">-- بدون گروه (تنظیم دستی) --</option>' + groupsData.map(g => '<option value="' + g.id + '">' + g.name + '</option>').join('');
             sel.value = currentVal;
             
             sel.onchange = (e) => {
@@ -6825,15 +6801,7 @@ window.addEventListener('click', (e) => {
 
         function renderGroups() {
             const container = document.getElementById('groups-list');
-            container.innerHTML = groupsData.map(g => `
-                <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 rounded-xl">
-                    <div>
-                        <div class="font-bold text-sm text-indigo-500">${g.name}</div>
-                        <div class="text-xs text-gray-500 mt-1">حجم: ${g.limit_gb || 'نامحدود'} GB | ریکوئست: ${g.limit_req || 'نامحدود'} | پورت‌ها: ${g.ports}</div>
-                    </div>
-                    <button onclick="deleteGroup(${g.id})" class="text-rose-500 hover:text-rose-600 font-bold text-xs bg-rose-50 dark:bg-rose-900/20 px-3 py-1.5 rounded-lg">حذف</button>
-                </div>
-            `).join('');
+            container.innerHTML = groupsData.map(g => '<div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 rounded-xl"><div><div class="font-bold text-sm text-indigo-500">' + g.name + '</div><div class="text-xs text-gray-500 mt-1">حجم: ' + (g.limit_gb || 'نامحدود') + ' GB | ریکوئست: ' + (g.limit_req || 'نامحدود') + ' | پورت‌ها: ' + g.ports + '</div></div><button onclick="deleteGroup(' + g.id + ')" class="text-rose-500 hover:text-rose-600 font-bold text-xs bg-rose-50 dark:bg-rose-900/20 px-3 py-1.5 rounded-lg">حذف</button></div>').join('');
         }
 
         async function createGroup() {
@@ -6897,7 +6865,7 @@ window.addEventListener('click', (e) => {
             const sel = document.getElementById('user-group');
             if(!sel) return;
             const currentVal = sel.value;
-            sel.innerHTML = '<option value="">-- بدون گروه (تنظیم دستی) --</option>' + groupsData.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+            sel.innerHTML = '<option value="">-- بدون گروه (تنظیم دستی) --</option>' + groupsData.map(g => '<option value="' + g.id + '">' + g.name + '</option>').join('');
             sel.value = currentVal;
             
             sel.onchange = (e) => {
@@ -7193,15 +7161,7 @@ window.addEventListener('click', (e) => {
 
         function renderGroups() {
             const container = document.getElementById('groups-list');
-            container.innerHTML = groupsData.map(g => `
-                <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 rounded-xl">
-                    <div>
-                        <div class="font-bold text-sm text-indigo-500">${g.name}</div>
-                        <div class="text-xs text-gray-500 mt-1">حجم: ${g.limit_gb || 'نامحدود'} GB | ریکوئست: ${g.limit_req || 'نامحدود'} | پورت‌ها: ${g.ports}</div>
-                    </div>
-                    <button onclick="deleteGroup(${g.id})" class="text-rose-500 hover:text-rose-600 font-bold text-xs bg-rose-50 dark:bg-rose-900/20 px-3 py-1.5 rounded-lg">حذف</button>
-                </div>
-            `).join('');
+            container.innerHTML = groupsData.map(g => '<div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-900 border dark:border-zinc-800 rounded-xl"><div><div class="font-bold text-sm text-indigo-500">' + g.name + '</div><div class="text-xs text-gray-500 mt-1">حجم: ' + (g.limit_gb || 'نامحدود') + ' GB | ریکوئست: ' + (g.limit_req || 'نامحدود') + ' | پورت‌ها: ' + g.ports + '</div></div><button onclick="deleteGroup(' + g.id + ')" class="text-rose-500 hover:text-rose-600 font-bold text-xs bg-rose-50 dark:bg-rose-900/20 px-3 py-1.5 rounded-lg">حذف</button></div>').join('');
         }
 
         async function createGroup() {
@@ -7265,7 +7225,7 @@ window.addEventListener('click', (e) => {
             const sel = document.getElementById('user-group');
             if(!sel) return;
             const currentVal = sel.value;
-            sel.innerHTML = '<option value="">-- بدون گروه (تنظیم دستی) --</option>' + groupsData.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+            sel.innerHTML = '<option value="">-- بدون گروه (تنظیم دستی) --</option>' + groupsData.map(g => '<option value="' + g.id + '">' + g.name + '</option>').join('');
             sel.value = currentVal;
             
             sel.onchange = (e) => {
